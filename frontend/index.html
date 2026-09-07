@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telegram Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21.5 4.3 18.9 19c-.2 1-.8 1.2-1.6.8l-4.4-3.3-2.1 2c-.2.3-.4.5-.9.5l.3-4.5 8.2-7.4c.4-.3-.1-.5-.6-.2L7.7 13 3.4 11.6c-.9-.3-.9-.9.2-1.4l16.5-6.4c.8-.3 1.5.2 1.4 1.5Z" fill="currentColor"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Telegram Panel</div>
+        <div class="brand-sub">Account &amp; Pool Manager</div>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item is-active" data-view="dashboard">
+        <svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+        <span>Übersicht</span>
+      </button>
+      <button class="nav-item" data-view="accounts">
+        <svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v3h16v-3c0-2.8-3.6-5-8-5Z"/></svg>
+        <span>Accounts</span>
+        <em class="nav-badge" id="badgeAccounts">0</em>
+      </button>
+      <button class="nav-item" data-view="pool">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>
+        <span>@username Pool</span>
+        <em class="nav-badge" id="badgePool">0</em>
+      </button>
+      <button class="nav-item" data-view="operation">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7L8 5Z"/></svg>
+        <span>Vorgang</span>
+      </button>
+      <button class="nav-item" data-view="jobs">
+        <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 10.4 4 2.3-1 1.7-5-2.9V6h2v6.4Z"/></svg>
+        <span>Protokoll</span>
+        <em class="nav-badge nav-badge--live" id="badgeJobs" hidden>0</em>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="hint">
+        <strong>Hinweis</strong>
+        Beitritte laufen über Einladungslinks mit Bestätigung — niemand wird
+        ungefragt in eine Gruppe gezogen.
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Content ─────────────────────────────────────────────── -->
+  <main class="main">
+
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">Übersicht</h1>
+        <p id="viewSubtitle">Status deiner Accounts und deines Pools.</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" id="btnReload">
+          <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+          Aktualisieren
+        </button>
+        <button class="btn btn-primary" data-goto="accounts" id="btnBindTop">
+          <svg viewBox="0 0 24 24"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>
+          Account binden
+        </button>
+      </div>
+    </header>
+
+    <!-- Dashboard -->
+    <section class="view is-active" data-view="dashboard">
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Accounts</span>
+          <strong class="stat-value" id="statAccounts">–</strong>
+          <span class="stat-foot" id="statAccountsFoot">keine gebunden</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Premium</span>
+          <strong class="stat-value" id="statPremium">–</strong>
+          <span class="stat-foot">Accounts mit Telegram Premium</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Pool</span>
+          <strong class="stat-value" id="statPool">–</strong>
+          <span class="stat-foot" id="statPoolFoot">–</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Beigetreten</span>
+          <strong class="stat-value" id="statJoined">–</strong>
+          <span class="stat-foot">über bestätigte Einladung</span>
+        </div>
+      </div>
+
+      <div class="split">
+        <div class="card">
+          <div class="card-head">
+            <h2>So läuft ein Vorgang</h2>
+          </div>
+          <ol class="steps">
+            <li><strong>Account binden</strong><span>Nummer, API-ID, API-Hash, optional Proxy und Geräteprofil.</span></li>
+            <li><strong>Pool füllen</strong><span>@usernames einfügen und gegen Telegram prüfen lassen.</span></li>
+            <li><strong>Einladungslink erzeugen</strong><span>Für die Zielgruppe, mit Beitrittsbestätigung.</span></li>
+            <li><strong>Vorgang starten</strong><span>Anfragen aus dem Pool werden automatisch genehmigt.</span></li>
+          </ol>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Letzte Jobs</h2>
+            <button class="btn btn-ghost btn-sm" data-goto="jobs">Alle</button>
+          </div>
+          <div id="dashJobs" class="mini-list"><div class="empty">Noch keine Jobs.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Accounts -->
+    <section class="view" data-view="accounts">
+      <div class="split split--wide">
+        <div class="card">
+          <div class="card-head">
+            <h2>Gebundene Accounts</h2>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshAll">Status prüfen</button>
+          </div>
+          <div id="accountList" class="account-list"><div class="empty">Noch kein Account gebunden.</div></div>
+        </div>
+
+        <div class="card card--form">
+          <div class="card-head"><h2>Account binden</h2></div>
+
+          <form id="bindForm" class="form">
+            <div class="field">
+              <label for="fLabel">Bezeichnung <em>optional</em></label>
+              <input id="fLabel" type="text" placeholder="z. B. Haupt-Account">
+            </div>
+            <div class="field">
+              <label for="fPhone">Telefonnummer</label>
+              <input id="fPhone" type="tel" placeholder="+49170..." required autocomplete="off">
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="fApiId">API-ID</label>
+                <input id="fApiId" type="number" placeholder="1234567" required>
+              </div>
+              <div class="field">
+                <label for="fApiHash">API-Hash</label>
+                <input id="fApiHash" type="text" placeholder="abc123..." required autocomplete="off">
+              </div>
+            </div>
+            <p class="field-note">API-ID und Hash bekommst du auf <span class="mono">my.telegram.org</span> → API development tools.</p>
+
+            <div class="field">
+              <label for="fDevice">Gerät</label>
+              <select id="fDevice"></select>
+              <p class="field-note">Wähle das Profil, das zu dem Gerät passt, auf dem du den Account sonst nutzt.</p>
+            </div>
+
+            <details class="disclosure">
+              <summary>Proxy <em>optional</em></summary>
+              <div class="disclosure-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="fProxyType">Typ</label>
+                    <select id="fProxyType">
+                      <option value="socks5">SOCKS5</option>
+                      <option value="socks4">SOCKS4</option>
+                      <option value="http">HTTP</option>
+                      <option value="mtproto">MTProto</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="fProxyPort">Port</label>
+                    <input id="fProxyPort" type="number" placeholder="1080">
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="fProxyHost">Host</label>
+                  <input id="fProxyHost" type="text" placeholder="127.0.0.1">
+                </div>
+                <div class="grid-2" id="proxyAuth">
+                  <div class="field">
+                    <label for="fProxyUser">Benutzer</label>
+                    <input id="fProxyUser" type="text" autocomplete="off">
+                  </div>
+                  <div class="field">
+                    <label for="fProxyPass">Passwort</label>
+                    <input id="fProxyPass" type="password" autocomplete="off">
+                  </div>
+                </div>
+                <div class="field" id="proxySecret" hidden>
+                  <label for="fProxySecret">MTProto-Secret</label>
+                  <input id="fProxySecret" type="text" autocomplete="off">
+                </div>
+              </div>
+            </details>
+
+            <button class="btn btn-primary btn-block" type="submit" id="btnBind">
+              Code anfordern
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pool -->
+    <section class="view" data-view="pool">
+      <div class="split split--wide">
+        <div class="card">
+          <div class="card-head">
+            <h2>Pool</h2>
+            <div class="card-tools">
+              <input id="poolSearch" class="input-sm" type="search" placeholder="Suchen…">
+              <select id="poolFilter" class="input-sm">
+                <option value="all">Alle</option>
+                <option value="new">Ungeprüft</option>
+                <option value="valid">Gültig</option>
+                <option value="invalid">Ungültig</option>
+                <option value="joined">Beigetreten</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="btnExportPool">Export</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table" id="poolTable">
+              <thead>
+                <tr><th>Username</th><th>Name</th><th>Status</th><th>Notiz</th><th></th></tr>
+              </thead>
+              <tbody><tr><td colspan="5"><div class="empty">Pool ist leer.</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card card--form">
+          <div class="card-head"><h2>Namen hinzufügen</h2></div>
+          <form id="poolForm" class="form">
+            <div class="field">
+              <label for="fPoolNames">@usernames</label>
+              <textarea id="fPoolNames" rows="9" placeholder="@name_eins&#10;@name_zwei&#10;t.me/name_drei"></textarea>
+              <p class="field-note">Ein Name pro Zeile, Komma-Liste oder t.me-Links — wird automatisch erkannt.</p>
+            </div>
+            <div class="field">
+              <label for="fPoolNote">Notiz <em>optional</em></label>
+              <input id="fPoolNote" type="text" placeholder="z. B. Kampagne März">
+            </div>
+            <button class="btn btn-primary btn-block" type="submit">Zum Pool hinzufügen</button>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="card-head"><h2>Pool prüfen</h2></div>
+          <p class="field-note">Löst jeden @username über einen gebundenen Account auf und markiert tote Namen.</p>
+          <div class="field">
+            <label for="fCheckAccount">Account</label>
+            <select id="fCheckAccount"></select>
+          </div>
+          <label class="check"><input type="checkbox" id="fOnlyNew" checked> nur ungeprüfte Einträge</label>
+          <button class="btn btn-block" id="btnPoolCheck">Prüfung starten</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Operation -->
+    <section class="view" data-view="operation">
+      <div class="notice">
+        <svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-6h-2v4h2v-4Z"/></svg>
+        <div>
+          <strong>Beitritt nur mit Bestätigung</strong>
+          Nutzer werden nicht ungefragt in die Gruppe eingefügt. Du erzeugst einen
+          Einladungslink mit Beitrittsanfrage, verteilst ihn an deinen Pool — und das
+          Panel genehmigt eingehende Anfragen automatisch, sobald der Absender im Pool steht.
+        </div>
+      </div>
+
+      <div class="split split--wide">
+        <div class="card card--form">
+          <div class="card-head"><h2>1 · Zielgruppe</h2></div>
+          <div class="field">
+            <label for="fOpAccount">Account</label>
+            <select id="fOpAccount"></select>
+          </div>
+          <div class="field">
+            <label for="fOpGroup">Gruppe</label>
+            <div class="row">
+              <select id="fOpGroup"><option value="">– Gruppen laden –</option></select>
+              <button class="btn btn-ghost btn-sm" id="btnLoadGroups">Laden</button>
+            </div>
+            <p class="field-note">Der Account braucht Admin-Rechte mit „Nutzer einladen“.</p>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="card-head"><h2>2 · Einladungslink</h2></div>
+          <div class="field">
+            <label for="fLinkTitle">Titel <em>optional</em></label>
+            <input id="fLinkTitle" type="text" placeholder="Pool-Einladung">
+          </div>
+          <button class="btn btn-block" id="btnInvite">Link mit Beitrittsanfrage erzeugen</button>
+          <div id="inviteResult" class="link-box" hidden>
+            <code id="inviteLink"></code>
+            <button class="btn btn-ghost btn-sm" id="btnCopyLink">Kopieren</button>
+          </div>
+        </div>
+
+        <div class="card card--form">
+          <div class="card-head"><h2>3 · Vorgang starten</h2></div>
+          <p class="field-note">
+            Prüft offene Beitrittsanfragen der Zielgruppe und genehmigt alle, die im Pool stehen.
+          </p>
+          <label class="check"><input type="checkbox" id="fPoolOnly" checked> nur Anfragen von Pool-Mitgliedern genehmigen</label>
+          <div class="field">
+            <label for="fWatch">Weiter beobachten</label>
+            <select id="fWatch">
+              <option value="0">einmalig durchlaufen</option>
+              <option value="15">15 Minuten</option>
+              <option value="60">1 Stunde</option>
+              <option value="240">4 Stunden</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-block" id="btnStartOp">Vorgang starten</button>
+
+          <div class="divider"></div>
+
+          <div class="card-head">
+            <h2>Offene Anfragen</h2>
+            <button class="btn btn-ghost btn-sm" id="btnLoadRequests">Prüfen</button>
+          </div>
+          <div id="requestList" class="mini-list"><div class="empty">Noch nichts abgerufen.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Jobs -->
+    <section class="view" data-view="jobs">
+      <div class="split split--wide">
+        <div class="card">
+          <div class="card-head"><h2>Jobs</h2></div>
+          <div id="jobList" class="mini-list"><div class="empty">Noch keine Jobs.</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Protokoll</h2>
+            <button class="btn btn-ghost btn-sm" id="btnCancelJob" hidden>Abbrechen</button>
+          </div>
+          <div id="jobDetail" class="log"><div class="empty">Job auswählen.</div></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Login-Dialog -->
+<div class="modal" id="loginModal" hidden>
+  <div class="modal-card">
+    <button class="modal-close" id="btnCloseModal" aria-label="Schließen">&times;</button>
+    <h2 id="modalTitle">Bestätigungscode</h2>
+    <p id="modalText">Telegram hat einen Code an deine Nummer geschickt.</p>
+    <form id="modalForm" class="form">
+      <div class="field">
+        <label id="modalLabel" for="fModalInput">Code</label>
+        <input id="fModalInput" type="text" autocomplete="one-time-code" inputmode="numeric">
+      </div>
+      <div class="modal-error" id="modalError" hidden></div>
+      <button class="btn btn-primary btn-block" type="submit" id="btnModalSubmit">Bestätigen</button>
+    </form>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
