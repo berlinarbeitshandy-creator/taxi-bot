@@ -1,4 +1,5 @@
-"""Hintergrund-Jobs: Pool pruefen und Beitrittsanfragen genehmigen."""
+"""Hintergrund-Jobs: Pool pruefen, Mitglieder aufnehmen, Beitrittsanfragen
+genehmigen."""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +9,7 @@ from typing import Any
 from telethon import errors
 
 from . import db, telegram_manager as tg
-from .config import API_DELAY
+from .config import ADD_DELAY, API_DELAY
 
 _tasks: dict[int, asyncio.Task] = {}
 
@@ -263,6 +264,138 @@ async def _run_approve(
                 await asyncio.sleep(30)
 
         _append_log(job_id, "info", f"Fertig - {stats['approved']} genehmigt.")
+        _finish(job_id, "done")
+    except asyncio.CancelledError:
+        _append_log(job_id, "warn", "Abgebrochen.")
+        _finish(job_id, "cancelled")
+        raise
+    except tg.TelegramError as exc:
+        _append_log(job_id, "error", str(exc))
+        _finish(job_id, "error")
+    except Exception as exc:
+        _append_log(job_id, "error", f"Unerwarteter Fehler: {exc}")
+        _finish(job_id, "error")
+
+
+# --------------------------------------------------------------------------
+# Job 3: Pool-Mitglieder direkt in die Zielgruppe aufnehmen
+# --------------------------------------------------------------------------
+
+_STATUS_FOR_OUTCOME = {
+    tg.ADDED: "added",
+    tg.ALREADY: "added",
+    tg.PRIVACY: "privacy",
+    tg.FAILED: "failed",
+}
+
+
+def start_add(
+    account_id: int,
+    target: str,
+    *,
+    delay: float = ADD_DELAY,
+    limit: int = 0,
+    only_valid: bool = True,
+) -> int:
+    job_id = create_job("add", account_id, target)
+    _spawn(job_id, _run_add(job_id, account_id, target, delay, limit, only_valid))
+    return job_id
+
+
+def _add_candidates(only_valid: bool, limit: int) -> list[dict[str, Any]]:
+    if only_valid:
+        sql = "SELECT * FROM pool WHERE status = 'valid' ORDER BY id"
+    else:
+        sql = "SELECT * FROM pool WHERE status NOT IN ('added', 'invalid') ORDER BY id"
+    entries = db.query(sql)
+    return entries[:limit] if limit else entries
+
+
+async def _run_add(
+    job_id: int,
+    account_id: int,
+    target: str,
+    delay: float,
+    limit: int,
+    only_valid: bool,
+) -> None:
+    entries = _add_candidates(only_valid, limit)
+    stats = {
+        "total": len(entries),
+        "done": 0,
+        "added": 0,
+        "already": 0,
+        "privacy": 0,
+        "failed": 0,
+    }
+    _set_stats(job_id, stats)
+    _append_log(
+        job_id,
+        "info",
+        f"{len(entries)} Eintraege, Pause {delay:.0f}s zwischen den Aufnahmen.",
+    )
+
+    if not entries:
+        _append_log(
+            job_id, "warn", "Nichts zu tun - Pool leer oder alles schon aufgenommen."
+        )
+        _finish(job_id, "done")
+        return
+
+    try:
+        account = tg.get_account(account_id)
+        async with tg.AccountClient(account) as client:
+            peer = await tg.resolve_peer(client, target)
+
+            for index, entry in enumerate(entries):
+                username = entry["username"]
+                identifier = entry["tg_user_id"] or username
+
+                while True:  # wiederholt nur nach einem abgewarteten Flood-Limit
+                    try:
+                        outcome, message = await tg.add_user_to_group(
+                            client, peer, identifier
+                        )
+                    except errors.FloodWaitError as exc:
+                        _append_log(job_id, "warn", f"Flood-Limit: warte {exc.seconds}s")
+                        await asyncio.sleep(exc.seconds + 1)
+                        continue
+                    except errors.PeerFloodError:
+                        # Telegram hat den Account als auffaellig eingestuft.
+                        # Weitermachen kostet hier den Account, nicht nur den Job.
+                        _append_log(
+                            job_id,
+                            "error",
+                            "Telegram hat den Account vorlaeufig fuer diese Aktion "
+                            "gesperrt (PeerFlood). Job gestoppt - spaeter mit "
+                            "groesserer Pause erneut versuchen.",
+                        )
+                        _finish(job_id, "error")
+                        return
+                    break
+
+                stats[outcome] += 1
+                db.execute(
+                    "UPDATE pool SET status = ? WHERE id = ?",
+                    (_STATUS_FOR_OUTCOME[outcome], entry["id"]),
+                )
+
+                level = "info" if outcome in (tg.ADDED, tg.ALREADY) else "warn"
+                _append_log(job_id, level, f"@{username}: {message}")
+
+                stats["done"] += 1
+                _set_stats(job_id, stats)
+
+                if index < len(entries) - 1:
+                    await asyncio.sleep(delay)
+
+        _append_log(
+            job_id,
+            "info",
+            f"Fertig - {stats['added']} aufgenommen, {stats['already']} schon drin, "
+            f"{stats['privacy']} durch Privatsphaere blockiert, "
+            f"{stats['failed']} fehlgeschlagen.",
+        )
         _finish(job_id, "done")
     except asyncio.CancelledError:
         _append_log(job_id, "warn", "Abgebrochen.")

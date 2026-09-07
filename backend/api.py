@@ -39,7 +39,9 @@ def stats() -> dict[str, Any]:
         "accounts_premium": sum(1 for a in accounts if a["is_premium"]),
         "pool": len(pool),
         "pool_valid": sum(1 for p in pool if p["status"] == "valid"),
-        "pool_joined": sum(1 for p in pool if p["status"] == "joined"),
+        # In der Gruppe angekommen - direkt aufgenommen oder ueber eine
+        # genehmigte Beitrittsanfrage.
+        "pool_joined": sum(1 for p in pool if p["status"] in ("added", "joined")),
         "jobs_running": running["c"] if running else 0,
     }
 
@@ -241,6 +243,19 @@ async def join_requests(account_id: int, target: str) -> list[dict[str, Any]]:
 @router.post("/jobs/pool-check")
 async def job_pool_check(payload: schemas.PoolCheckIn) -> dict[str, int]:
     return {"job_id": jobs.start_pool_check(payload.account_id, payload.only_new)}
+
+
+@router.post("/jobs/add")
+async def job_add(payload: schemas.AddIn) -> dict[str, int]:
+    return {
+        "job_id": jobs.start_add(
+            payload.account_id,
+            payload.target,
+            delay=payload.delay,
+            limit=payload.limit,
+            only_valid=payload.only_valid,
+        )
+    }
 
 
 @router.post("/jobs/approve")

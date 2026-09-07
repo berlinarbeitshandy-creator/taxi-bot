@@ -60,3 +60,11 @@ class ApproveIn(BaseModel):
 class PoolCheckIn(BaseModel):
     account_id: int
     only_new: bool = True
+
+
+class AddIn(BaseModel):
+    account_id: int
+    target: str
+    delay: float = Field(default=45, ge=3, le=600)
+    limit: int = Field(default=0, ge=0)
+    only_valid: bool = True

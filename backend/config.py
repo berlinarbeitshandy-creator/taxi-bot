@@ -19,6 +19,10 @@ PANEL_PORT = int(os.getenv("PANEL_PORT", "8000"))
 # Wartezeit zwischen einzelnen Telegram-Aufrufen in Sekunden.
 API_DELAY = float(os.getenv("PANEL_API_DELAY", "1.5"))
 
+# Standardpause zwischen zwei Hinzufuege-Aktionen in Sekunden. Telegram
+# begrenzt diese Aktion deutlich strenger als reine Lesezugriffe.
+ADD_DELAY = float(os.getenv("PANEL_ADD_DELAY", "45"))
+
 # Abbruch, wenn Telegram nicht erreichbar ist (Firewall, toter Proxy).
 CONNECT_TIMEOUT = float(os.getenv("PANEL_CONNECT_TIMEOUT", "25"))
 

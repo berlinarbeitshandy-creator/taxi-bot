@@ -25,27 +25,42 @@ Einladungen in eine Zielgruppe zu holen.
   tote Namen als ungültig
 - Filtern, suchen, als CSV exportieren
 
-**Vorgang**
+**Vorgang — Mitglieder aufnehmen**
+- Nimmt die Pool-Einträge nacheinander in die Zielgruppe auf
+- Pause und Höchstzahl pro Durchlauf einstellbar, mit Dauer-Schätzung
+- Erkennt Privatsphäre-Blockaden, bereits vorhandene Mitglieder und Fehler
+  je Eintrag und schreibt das Ergebnis in den Pool-Status
+- Stoppt bei PeerFlood von selbst, statt den Account weiter zu verbrennen
+
+**Vorgang — Einladungslink (Alternative)**
 - Einladungslink für die Zielgruppe erzeugen — mit Beitrittsanfrage
 - Auto-Approve-Job: offene Beitrittsanfragen werden gegen den Pool geprüft
   und genehmigt; wahlweise einmalig oder über einen Zeitraum beobachtend
-- Protokoll mit Fortschritt, Zählern und Live-Log
+
+**Protokoll**
+- Fortschritt, Zähler und Live-Log für jeden Job
 
 ---
 
-## Wie Beitritte ablaufen
+## Die zwei Wege in die Gruppe
 
-Das Panel fügt **niemanden ungefragt** in eine Gruppe ein. Der Weg ist:
+**Direkt aufnehmen** ist der kurze Weg und funktioniert für Accounts, die du
+selbst kontrollierst. Grenzen setzt Telegram, nicht das Panel:
 
-1. Einladungslink mit aktivierter Beitrittsanfrage erzeugen.
-2. Link an die Leute aus deinem Pool verteilen.
-3. Wer beitreten will, stellt eine Anfrage.
-4. Der Vorgang genehmigt automatisch alle Anfragen, deren Absender im Pool steht.
+- Das Aufnehmen ist deutlich strenger begrenzt als Lesezugriffe. Bewährt sind
+  45 Sekunden oder mehr Pause und höchstens 20–30 Aufnahmen pro Account und Tag.
+- Bei `FloodWaitError` wartet das Panel die geforderte Zeit ab und macht weiter.
+- Bei `PeerFloodError` hat Telegram den Account als auffällig eingestuft. Der
+  Job stoppt dann sofort — weiterzumachen kostet den Account, nicht nur den Job.
+- Steht die Privatsphäre-Einstellung „Wer kann mich zu Gruppen hinzufügen“ auf
+  *Meine Kontakte*, scheitert die Aufnahme. Abhilfe: die Einstellung im
+  betroffenen Account ändern oder die Accounts gegenseitig als Kontakt
+  hinterlegen.
 
-Das hat zwei Gründe. Zum einen ist das Massen-Hinzufügen fremder Nutzer in
-Telegrams Nutzungsbedingungen untersagt und führt zuverlässig zu Sperren —
-auch bei Premium-Accounts. Zum anderen entscheiden die Leute selbst, ob sie
-in der Gruppe landen wollen.
+**Über den Einladungslink** geht immer, auch an Privatsphäre-Einstellungen
+vorbei, und zählt nicht gegen die Aufnahme-Limits: Link mit Beitrittsanfrage
+erzeugen, verteilen, und das Panel genehmigt eingehende Anfragen automatisch —
+wahlweise nur die, deren Absender im Pool steht.
 
 ---
 
@@ -83,6 +98,7 @@ Alles über `.env` (siehe `.env.example`):
 | `PANEL_USER` / `PANEL_PASSWORD` | Basic-Auth für das Panel. Passwort leer → kein Login. | `admin` / – |
 | `PANEL_HOST` / `PANEL_PORT` | Bind-Adresse | `127.0.0.1:8000` |
 | `PANEL_API_DELAY` | Pause zwischen einzelnen Telegram-Aufrufen in Sekunden | `1.5` |
+| `PANEL_ADD_DELAY` | Vorgabe für die Pause zwischen zwei Aufnahmen | `45` |
 | `PANEL_CONNECT_TIMEOUT` | Abbruch, wenn Telegram nicht erreichbar ist | `25` |
 
 > **Wichtig:** Änderst du `PANEL_SECRET_KEY` nachträglich, lassen sich
@@ -111,8 +127,8 @@ backend/
   crypto.py             Fernet-Verschlüsselung für Sessions
   db.py                 SQLite-Zugriff und Schema
   devices.py            Geräteprofile
-  telegram_manager.py   Telethon: Login, Client-Pool, Gruppen, Anfragen
-  jobs.py               Hintergrund-Jobs (Pool-Prüfung, Auto-Approve)
+  telegram_manager.py   Telethon: Login, Client-Pool, Gruppen, Aufnahme
+  jobs.py               Hintergrund-Jobs (Prüfung, Aufnahme, Auto-Approve)
   schemas.py            Pydantic-Modelle
   api.py                HTTP-Endpunkte
   main.py               FastAPI-App, Basic-Auth, statisches Frontend
@@ -130,8 +146,10 @@ run.py                  Startskript (liest .env)
 - Telegram begrenzt, wie viele Anfragen ein Account in kurzer Zeit stellen
   darf. Bei `FloodWaitError` wartet das Panel die geforderte Zeit ab und
   macht weiter — bei großen Pools dauert eine Prüfung entsprechend.
-- Zum Erzeugen von Einladungslinks und Genehmigen von Anfragen braucht der
-  Account Admin-Rechte mit „Nutzer einladen“ in der Zielgruppe.
+- Ein Durchlauf mit 25 Einträgen und 45 Sekunden Pause läuft rund 18 Minuten.
+  Das Panel muss dabei laufen.
+- Zum Aufnehmen, Erzeugen von Einladungslinks und Genehmigen von Anfragen
+  braucht der Account Admin-Rechte mit „Nutzer einladen“ in der Zielgruppe.
 - Die Job-Ausführung läuft im Prozess des Panels. Wird das Panel beendet,
   werden laufende Jobs als *unterbrochen* markiert und müssen neu gestartet
   werden.

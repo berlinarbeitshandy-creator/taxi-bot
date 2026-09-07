@@ -239,6 +239,8 @@ a { color: var(--accent); }
   min-width: 0;
 }
 .card--form { align-self: start; }
+.card--lead { margin-bottom: 18px; }
+.card--form > .btn-block + .field-note { margin-top: 10px; text-align: center; }
 .card--form > .field,
 .card--form > .check,
 .card--form > .field-note { margin-bottom: 13px; }

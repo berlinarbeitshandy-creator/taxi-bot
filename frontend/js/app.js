@@ -73,7 +73,7 @@ const VIEW_META = {
   dashboard: ["Übersicht", "Status deiner Accounts und deines Pools."],
   accounts:  ["Accounts", "Telegram-Accounts binden und verwalten."],
   pool:      ["@username Pool", "Deine gesammelten Namen an einem Ort."],
-  operation: ["Vorgang", "Einladungslink erzeugen und Beitritte bestätigen."],
+  operation: ["Vorgang", "Pool-Mitglieder in die Zielgruppe aufnehmen."],
   jobs:      ["Protokoll", "Laufende und abgeschlossene Jobs."],
 };
 
@@ -367,7 +367,10 @@ const POOL_BADGE = {
   valid:   ["badge-ok", "gültig"],
   invalid: ["badge-danger", "ungültig"],
   error:   ["badge-warn", "Fehler"],
+  added:   ["badge-accent", "aufgenommen"],
   joined:  ["badge-accent", "beigetreten"],
+  privacy: ["badge-warn", "Privatsphäre"],
+  failed:  ["badge-danger", "fehlgeschlagen"],
 };
 
 function renderPool() {
@@ -402,6 +405,7 @@ async function loadPool() {
   if (search) params.set("q", search);
   state.pool = await api(`/pool?${params}`);
   renderPool();
+  renderAddEstimate();
 }
 
 $("#poolForm").addEventListener("submit", async (e) => {
@@ -497,6 +501,60 @@ $("#btnLoadGroups").addEventListener("click", async () => {
   }
 });
 
+function addCandidateCount() {
+  const onlyValid = $("#fOnlyValid").checked;
+  return state.pool.filter((p) =>
+    onlyValid ? p.status === "valid" : !["added", "invalid"].includes(p.status)
+  ).length;
+}
+
+function renderAddEstimate() {
+  const delay = Number($("#fAddDelay").value);
+  const limit = Number($("#fAddLimit").value);
+  const available = addCandidateCount();
+  const count = limit ? Math.min(limit, available) : available;
+
+  if (!count) {
+    $("#addEstimate").textContent = $("#fOnlyValid").checked
+      ? "Keine geprüften Einträge — erst den Pool prüfen."
+      : "Keine offenen Einträge im Pool.";
+    return;
+  }
+  const minutes = Math.round(((count - 1) * delay) / 60);
+  const duration = minutes < 1 ? "unter einer Minute" : `rund ${minutes} Minuten`;
+  $("#addEstimate").textContent =
+    `${count} von ${available} Einträgen · Dauer ${duration}.`;
+}
+
+["#fAddDelay", "#fAddLimit", "#fOnlyValid"].forEach((sel) =>
+  $(sel).addEventListener("change", renderAddEstimate)
+);
+
+$("#btnStartAdd").addEventListener("click", async () => {
+  const accountId = Number($("#fOpAccount").value);
+  const target = $("#fOpGroup").value;
+  if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
+  if (!addCandidateCount()) return toast("Keine passenden Pool-Einträge.", "error");
+
+  try {
+    const res = await api("/jobs/add", {
+      method: "POST",
+      body: {
+        account_id: accountId,
+        target,
+        delay: Number($("#fAddDelay").value),
+        limit: Number($("#fAddLimit").value),
+        only_valid: $("#fOnlyValid").checked,
+      },
+    });
+    state.activeJob = res.job_id;
+    toast("Vorgang gestartet.", "ok");
+    showView("jobs");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
 $("#btnInvite").addEventListener("click", async () => {
   const accountId = Number($("#fOpAccount").value);
   const target = $("#fOpGroup").value;
@@ -589,7 +647,11 @@ $("#btnStartOp").addEventListener("click", async () => {
 
 /* ── Jobs ────────────────────────────────────────────────── */
 
-const JOB_LABEL = { pool_check: "Pool-Prüfung", approve: "Beitritte bestätigen" };
+const JOB_LABEL = {
+  pool_check: "Pool-Prüfung",
+  add: "Mitglieder aufnehmen",
+  approve: "Anfragen genehmigen",
+};
 const JOB_BADGE = {
   running:     ["badge-accent", "läuft"],
   done:        ["badge-ok", "fertig"],
@@ -602,6 +664,10 @@ function jobSummary(job) {
   const s = job.stats || {};
   if (job.kind === "pool_check") {
     return `${s.done ?? 0}/${s.total ?? 0} geprüft · ${s.ok ?? 0} gültig`;
+  }
+  if (job.kind === "add") {
+    return `${s.done ?? 0}/${s.total ?? 0} · ${s.added ?? 0} aufgenommen · ${
+      s.privacy ?? 0} blockiert`;
   }
   return `${s.approved ?? 0} genehmigt · ${s.skipped ?? 0} übersprungen`;
 }
@@ -650,7 +716,8 @@ async function loadJobDetail(jobId) {
   $("#btnCancelJob").hidden = job.status !== "running";
 
   const s = job.stats || {};
-  const progress = job.kind === "pool_check" && s.total
+  const hasProgress = ["pool_check", "add"].includes(job.kind) && s.total;
+  const progress = hasProgress
     ? `<div class="progress"><i style="width:${Math.round((s.done / s.total) * 100)}%"></i></div>`
     : "";
 

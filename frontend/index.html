@@ -53,9 +53,9 @@
 
     <div class="sidebar-foot">
       <div class="hint">
-        <strong>Hinweis</strong>
-        Beitritte laufen über Einladungslinks mit Bestätigung — niemand wird
-        ungefragt in eine Gruppe gezogen.
+        <strong>Faustregel</strong>
+        Beim Aufnehmen zählt die Pause: 45 Sekunden oder mehr, höchstens 20–30
+        Aufnahmen pro Account und Tag. Schneller gibt eine PeerFlood-Sperre.
       </div>
     </div>
   </aside>
@@ -113,8 +113,8 @@
           <ol class="steps">
             <li><strong>Account binden</strong><span>Nummer, API-ID, API-Hash, optional Proxy und Geräteprofil.</span></li>
             <li><strong>Pool füllen</strong><span>@usernames einfügen und gegen Telegram prüfen lassen.</span></li>
-            <li><strong>Einladungslink erzeugen</strong><span>Für die Zielgruppe, mit Beitrittsbestätigung.</span></li>
-            <li><strong>Vorgang starten</strong><span>Anfragen aus dem Pool werden automatisch genehmigt.</span></li>
+            <li><strong>Zielgruppe wählen</strong><span>Gruppe, in der der Account „Nutzer einladen“ darf.</span></li>
+            <li><strong>Vorgang starten</strong><span>Pool wird nacheinander aufgenommen — mit Pause dazwischen.</span></li>
           </ol>
         </div>
 
@@ -229,6 +229,9 @@
                 <option value="new">Ungeprüft</option>
                 <option value="valid">Gültig</option>
                 <option value="invalid">Ungültig</option>
+                <option value="added">Aufgenommen</option>
+                <option value="privacy">Privatsphäre</option>
+                <option value="failed">Fehlgeschlagen</option>
                 <option value="joined">Beigetreten</option>
               </select>
               <button class="btn btn-ghost btn-sm" id="btnExportPool">Export</button>
@@ -278,16 +281,18 @@
       <div class="notice">
         <svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-6h-2v4h2v-4Z"/></svg>
         <div>
-          <strong>Beitritt nur mit Bestätigung</strong>
-          Nutzer werden nicht ungefragt in die Gruppe eingefügt. Du erzeugst einen
-          Einladungslink mit Beitrittsanfrage, verteilst ihn an deinen Pool — und das
-          Panel genehmigt eingehende Anfragen automatisch, sobald der Absender im Pool steht.
+          <strong>Tempo bestimmt, ob es klappt</strong>
+          Telegram begrenzt das Aufnehmen von Mitgliedern deutlich strenger als
+          alles andere. Zu kurze Pausen führen zu einer PeerFlood-Sperre für den
+          Account — das Panel bricht dann von selbst ab. Bewährt sind 45 Sekunden
+          oder mehr zwischen den Aufnahmen und nicht mehr als 20–30 pro Account
+          und Tag.
         </div>
       </div>
 
-      <div class="split split--wide">
-        <div class="card card--form">
-          <div class="card-head"><h2>1 · Zielgruppe</h2></div>
+      <div class="card card--form card--lead">
+        <div class="card-head"><h2>1 · Zielgruppe</h2></div>
+        <div class="grid-2">
           <div class="field">
             <label for="fOpAccount">Account</label>
             <select id="fOpAccount"></select>
@@ -298,12 +303,56 @@
               <select id="fOpGroup"><option value="">– Gruppen laden –</option></select>
               <button class="btn btn-ghost btn-sm" id="btnLoadGroups">Laden</button>
             </div>
-            <p class="field-note">Der Account braucht Admin-Rechte mit „Nutzer einladen“.</p>
           </div>
+        </div>
+        <p class="field-note">Der Account braucht Admin-Rechte mit „Nutzer einladen“ in dieser Gruppe.</p>
+      </div>
+
+      <div class="split split--wide">
+        <div class="card card--form">
+          <div class="card-head"><h2>2 · Mitglieder aufnehmen</h2></div>
+          <p class="field-note">
+            Nimmt die Namen aus dem Pool nacheinander in die Zielgruppe auf.
+          </p>
+          <div class="grid-2">
+            <div class="field">
+              <label for="fAddDelay">Pause zwischen Aufnahmen</label>
+              <select id="fAddDelay">
+                <option value="20">20 Sekunden — zügig</option>
+                <option value="45" selected>45 Sekunden — empfohlen</option>
+                <option value="90">90 Sekunden — vorsichtig</option>
+                <option value="180">3 Minuten — sehr vorsichtig</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fAddLimit">Höchstens pro Durchlauf</label>
+              <select id="fAddLimit">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="0">alle</option>
+              </select>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="fOnlyValid" checked> nur geprüfte Pool-Einträge</label>
+          <button class="btn btn-primary btn-block" id="btnStartAdd">Vorgang starten</button>
+          <p class="field-note" id="addEstimate">–</p>
 
           <div class="divider"></div>
 
-          <div class="card-head"><h2>2 · Einladungslink</h2></div>
+          <p class="field-note">
+            Blockiert die Privatsphäre-Einstellung eines Accounts das Aufnehmen,
+            hilft der Weg über den Einladungslink rechts — oder du hinterlegst die
+            Accounts gegenseitig als Kontakt.
+          </p>
+        </div>
+
+        <div class="card card--form">
+          <div class="card-head"><h2>Einladungslink</h2></div>
+          <p class="field-note">
+            Alternative, wenn das direkte Aufnehmen scheitert: Link verteilen,
+            Anfragen genehmigt das Panel automatisch gegen den Pool.
+          </p>
           <div class="field">
             <label for="fLinkTitle">Titel <em>optional</em></label>
             <input id="fLinkTitle" type="text" placeholder="Pool-Einladung">
@@ -313,14 +362,11 @@
             <code id="inviteLink"></code>
             <button class="btn btn-ghost btn-sm" id="btnCopyLink">Kopieren</button>
           </div>
-        </div>
 
-        <div class="card card--form">
-          <div class="card-head"><h2>3 · Vorgang starten</h2></div>
-          <p class="field-note">
-            Prüft offene Beitrittsanfragen der Zielgruppe und genehmigt alle, die im Pool stehen.
-          </p>
-          <label class="check"><input type="checkbox" id="fPoolOnly" checked> nur Anfragen von Pool-Mitgliedern genehmigen</label>
+          <div class="divider"></div>
+
+          <div class="card-head"><h2>Anfragen genehmigen</h2></div>
+          <label class="check"><input type="checkbox" id="fPoolOnly" checked> nur Anfragen von Pool-Mitgliedern</label>
           <div class="field">
             <label for="fWatch">Weiter beobachten</label>
             <select id="fWatch">
@@ -330,7 +376,7 @@
               <option value="240">4 Stunden</option>
             </select>
           </div>
-          <button class="btn btn-primary btn-block" id="btnStartOp">Vorgang starten</button>
+          <button class="btn btn-block" id="btnStartOp">Anfragen abarbeiten</button>
 
           <div class="divider"></div>
 
