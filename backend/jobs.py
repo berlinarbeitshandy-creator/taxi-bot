@@ -107,9 +107,9 @@ async def _run_pool_check(job_id: int, account_id: int, only_new: bool) -> None:
     sql += " ORDER BY id"
     entries = db.query(sql)
 
-    stats = {"total": len(entries), "done": 0, "ok": 0, "invalid": 0, "failed": 0}
+    stats = {"total": len(entries), "done": 0, "ok": 0, "dead": 0, "failed": 0}
     _set_stats(job_id, stats)
-    _append_log(job_id, "info", f"{len(entries)} Pool-Eintraege werden geprueft.")
+    _append_log(job_id, "info", f"{len(entries)} Pool-Einträge werden geprüft.")
 
     try:
         account = tg.get_account(account_id)
@@ -123,8 +123,8 @@ async def _run_pool_check(job_id: int, account_id: int, only_new: bool) -> None:
                                     getattr(user, "last_name", None)] if p
                     ).strip()
                     db.execute(
-                        "UPDATE pool SET status = 'valid', tg_user_id = ?, display = ?,"
-                        " is_premium = ?, checked_at = ? WHERE id = ?",
+                        "UPDATE pool SET status = 'valid', reason = '', tg_user_id = ?,"
+                        " display = ?, is_premium = ?, checked_at = ? WHERE id = ?",
                         (
                             user.id,
                             display or username,
@@ -136,10 +136,11 @@ async def _run_pool_check(job_id: int, account_id: int, only_new: bool) -> None:
                     stats["ok"] += 1
                 except (ValueError, errors.UsernameInvalidError, errors.UsernameNotOccupiedError):
                     db.execute(
-                        "UPDATE pool SET status = 'invalid', checked_at = ? WHERE id = ?",
-                        (db.now(), entry["id"]),
+                        "UPDATE pool SET status = 'dead', reason = ?, checked_at = ?"
+                        " WHERE id = ?",
+                        ("existiert nicht", db.now(), entry["id"]),
                     )
-                    stats["invalid"] += 1
+                    stats["dead"] += 1
                     _append_log(job_id, "warn", f"{username}: nicht gefunden")
                 except errors.FloodWaitError as exc:
                     _append_log(job_id, "warn", f"Flood-Limit: warte {exc.seconds}s")
@@ -157,7 +158,7 @@ async def _run_pool_check(job_id: int, account_id: int, only_new: bool) -> None:
                 _set_stats(job_id, stats)
                 await asyncio.sleep(API_DELAY)
 
-        _append_log(job_id, "info", "Pool-Pruefung abgeschlossen.")
+        _append_log(job_id, "info", "Pool-Prüfung abgeschlossen.")
         _finish(job_id, "done")
     except asyncio.CancelledError:
         _append_log(job_id, "warn", "Abgebrochen.")
@@ -204,7 +205,7 @@ async def _run_approve(
     stats = {"approved": 0, "skipped": 0, "failed": 0, "seen": 0, "rounds": 0}
     _set_stats(job_id, stats)
     mode = "nur Pool-Mitglieder" if pool_only else "alle Anfragen"
-    _append_log(job_id, "info", f"Ziel: {target} - Modus: {mode}")
+    _append_log(job_id, "info", f"Ziel: {target} — Modus: {mode}")
 
     deadline = time.time() + watch_minutes * 60 if watch_minutes else 0
 
@@ -263,7 +264,7 @@ async def _run_approve(
                     break
                 await asyncio.sleep(30)
 
-        _append_log(job_id, "info", f"Fertig - {stats['approved']} genehmigt.")
+        _append_log(job_id, "info", f"Fertig — {stats['approved']} genehmigt.")
         _finish(job_id, "done")
     except asyncio.CancelledError:
         _append_log(job_id, "warn", "Abgebrochen.")
@@ -281,11 +282,14 @@ async def _run_approve(
 # Job 3: Pool-Mitglieder direkt in die Zielgruppe aufnehmen
 # --------------------------------------------------------------------------
 
+# Wer nicht aufgenommen werden kann, wird tot markiert und faellt aus den
+# folgenden Durchlaeufen raus. Der Grund steht in der Spalte daneben, damit
+# man Blockaden von wirklich toten Accounts unterscheiden kann.
 _STATUS_FOR_OUTCOME = {
     tg.ADDED: "added",
     tg.ALREADY: "added",
-    tg.PRIVACY: "privacy",
-    tg.FAILED: "failed",
+    tg.PRIVACY: "dead",
+    tg.FAILED: "dead",
 }
 
 
@@ -306,7 +310,8 @@ def _add_candidates(only_valid: bool, limit: int) -> list[dict[str, Any]]:
     if only_valid:
         sql = "SELECT * FROM pool WHERE status = 'valid' ORDER BY id"
     else:
-        sql = "SELECT * FROM pool WHERE status NOT IN ('added', 'invalid') ORDER BY id"
+        # Tote und bereits aufgenommene Eintraege kosten sonst nur Versuche.
+        sql = "SELECT * FROM pool WHERE status NOT IN ('added', 'dead') ORDER BY id"
     entries = db.query(sql)
     return entries[:limit] if limit else entries
 
@@ -332,12 +337,12 @@ async def _run_add(
     _append_log(
         job_id,
         "info",
-        f"{len(entries)} Eintraege, Pause {delay:.0f}s zwischen den Aufnahmen.",
+        f"{len(entries)} Einträge, Pause {delay:.0f}s zwischen den Aufnahmen.",
     )
 
     if not entries:
         _append_log(
-            job_id, "warn", "Nichts zu tun - Pool leer oder alles schon aufgenommen."
+            job_id, "warn", "Nichts zu tun — Pool leer oder alles schon aufgenommen."
         )
         _finish(job_id, "done")
         return
@@ -366,9 +371,9 @@ async def _run_add(
                         _append_log(
                             job_id,
                             "error",
-                            "Telegram hat den Account vorlaeufig fuer diese Aktion "
-                            "gesperrt (PeerFlood). Job gestoppt - spaeter mit "
-                            "groesserer Pause erneut versuchen.",
+                            "Telegram hat den Account vorläufig für diese Aktion "
+                            "gesperrt (PeerFlood). Job gestoppt — später mit "
+                            "größerer Pause erneut versuchen.",
                         )
                         _finish(job_id, "error")
                         return
@@ -376,8 +381,12 @@ async def _run_add(
 
                 stats[outcome] += 1
                 db.execute(
-                    "UPDATE pool SET status = ? WHERE id = ?",
-                    (_STATUS_FOR_OUTCOME[outcome], entry["id"]),
+                    "UPDATE pool SET status = ?, reason = ? WHERE id = ?",
+                    (
+                        _STATUS_FOR_OUTCOME[outcome],
+                        "" if outcome in (tg.ADDED, tg.ALREADY) else message,
+                        entry["id"],
+                    ),
                 )
 
                 level = "info" if outcome in (tg.ADDED, tg.ALREADY) else "warn"
@@ -392,9 +401,9 @@ async def _run_add(
         _append_log(
             job_id,
             "info",
-            f"Fertig - {stats['added']} aufgenommen, {stats['already']} schon drin, "
-            f"{stats['privacy']} durch Privatsphaere blockiert, "
-            f"{stats['failed']} fehlgeschlagen.",
+            f"Fertig — {stats['added']} aufgenommen, {stats['already']} schon drin, "
+            f"{stats['privacy'] + stats['failed']} als tot markiert "
+            f"({stats['privacy']} Privatsphäre, {stats['failed']} sonstiges).",
         )
         _finish(job_id, "done")
     except asyncio.CancelledError:

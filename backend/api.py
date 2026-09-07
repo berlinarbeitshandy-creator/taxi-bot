@@ -39,6 +39,7 @@ def stats() -> dict[str, Any]:
         "accounts_premium": sum(1 for a in accounts if a["is_premium"]),
         "pool": len(pool),
         "pool_valid": sum(1 for p in pool if p["status"] == "valid"),
+        "pool_dead": sum(1 for p in pool if p["status"] == "dead"),
         # In der Gruppe angekommen - direkt aufgenommen oder ueber eine
         # genehmigte Beitrittsanfrage.
         "pool_joined": sum(1 for p in pool if p["status"] in ("added", "joined")),

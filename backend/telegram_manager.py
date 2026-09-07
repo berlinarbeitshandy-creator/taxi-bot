@@ -531,7 +531,7 @@ async def add_user_to_group(client: TelegramClient, peer, target_user) -> tuple[
     try:
         input_user = await client.get_input_entity(target_user)
     except (ValueError, TypeError) as exc:
-        return FAILED, f"nicht aufloesbar: {exc}"
+        return FAILED, "Name nicht auflösbar"
 
     try:
         if isinstance(peer, types.Chat) or isinstance(peer, types.InputPeerChat):
@@ -550,28 +550,28 @@ async def add_user_to_group(client: TelegramClient, peer, target_user) -> tuple[
             # Neuere Layer melden hier still, wen sie nicht aufnehmen konnten.
             missing = getattr(result, "missing_invitees", None)
             if missing:
-                return PRIVACY, "von Telegram abgelehnt (Privatsphaere-Einstellung)"
+                return PRIVACY, "Privatsphäre-Einstellung"
     except errors.UserAlreadyParticipantError:
         return ALREADY, "war schon in der Gruppe"
     except errors.UserPrivacyRestrictedError:
-        return PRIVACY, "Privatsphaere-Einstellung verbietet das Hinzufuegen"
+        return PRIVACY, "Privatsphäre-Einstellung"
     except errors.UserNotMutualContactError:
-        return PRIVACY, "muss den hinzufuegenden Account als Kontakt haben"
+        return PRIVACY, "kein gegenseitiger Kontakt"
     except errors.UserChannelsTooMuchError:
-        return FAILED, "ist in zu vielen Gruppen"
+        return FAILED, "in zu vielen Gruppen"
     except errors.UserBannedInChannelError:
-        return FAILED, "ist in dieser Gruppe gesperrt"
+        return FAILED, "in der Gruppe gesperrt"
     except errors.InputUserDeactivatedError:
-        return FAILED, "Account ist geloescht"
+        return FAILED, "Account gelöscht"
     except errors.UserKickedError:
-        return FAILED, "wurde aus der Gruppe entfernt"
+        return FAILED, "aus der Gruppe entfernt"
     except errors.UsersTooMuchError:
-        return FAILED, "Gruppe hat ihr Mitgliederlimit erreicht"
+        return FAILED, "Gruppe voll"
     except errors.ChatAdminRequiredError:
         raise TelegramError(
             "Der Account braucht Admin-Rechte mit 'Nutzer einladen' in dieser Gruppe."
         )
-    return ADDED, "hinzugefuegt"
+    return ADDED, "aufgenommen"
 
 
 async def resolve_peer(client: TelegramClient, target: str | int):

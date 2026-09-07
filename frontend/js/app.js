@@ -8,6 +8,7 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const state = {
   accounts: [],
   pool: [],
+  stats: null,
   devices: [],
   groups: [],
   jobs: [],
@@ -101,12 +102,14 @@ document.addEventListener("click", (e) => {
 
 async function loadStats() {
   const s = await api("/stats");
+  state.stats = s;
   $("#statAccounts").textContent = s.accounts;
   $("#statAccountsFoot").textContent =
     s.accounts ? `${s.accounts_online} online` : "keine gebunden";
   $("#statPremium").textContent = s.accounts_premium;
   $("#statPool").textContent = s.pool;
-  $("#statPoolFoot").textContent = `${s.pool_valid} geprüft`;
+  $("#statPoolFoot").textContent =
+    `${s.pool_valid} geprüft${s.pool_dead ? ` · ${s.pool_dead} tot` : ""}`;
   $("#statJoined").textContent = s.pool_joined;
   $("#badgeAccounts").textContent = s.accounts;
   $("#badgePool").textContent = s.pool;
@@ -114,6 +117,8 @@ async function loadStats() {
   const badge = $("#badgeJobs");
   badge.hidden = !s.jobs_running;
   badge.textContent = s.jobs_running;
+
+  renderAddEstimate();
 }
 
 /* ── Accounts ────────────────────────────────────────────── */
@@ -363,14 +368,12 @@ $("#modalForm").addEventListener("submit", async (e) => {
 /* ── Pool ────────────────────────────────────────────────── */
 
 const POOL_BADGE = {
-  new:     ["badge-muted", "ungeprüft"],
-  valid:   ["badge-ok", "gültig"],
-  invalid: ["badge-danger", "ungültig"],
-  error:   ["badge-warn", "Fehler"],
-  added:   ["badge-accent", "aufgenommen"],
-  joined:  ["badge-accent", "beigetreten"],
-  privacy: ["badge-warn", "Privatsphäre"],
-  failed:  ["badge-danger", "fehlgeschlagen"],
+  new:    ["badge-muted", "ungeprüft"],
+  valid:  ["badge-ok", "gültig"],
+  dead:   ["badge-danger", "tot"],
+  error:  ["badge-warn", "Fehler"],
+  added:  ["badge-accent", "aufgenommen"],
+  joined: ["badge-accent", "beigetreten"],
 };
 
 function renderPool() {
@@ -386,7 +389,10 @@ function renderPool() {
       <tr>
         <td class="cell-user">@${esc(p.username)}</td>
         <td>${esc(p.display || "–")}${p.is_premium ? ' <span class="badge badge-premium">★</span>' : ""}</td>
-        <td><span class="badge ${cls}">${esc(text)}</span></td>
+        <td>
+          <span class="badge ${cls}">${esc(text)}</span>
+          ${p.reason ? `<span class="cell-reason">${esc(p.reason)}</span>` : ""}
+        </td>
         <td class="cell-dim">${esc(p.note || "–")}</td>
         <td>
           <button class="icon-btn" data-del="${p.id}" title="Entfernen">
@@ -441,12 +447,35 @@ $("#poolSearch").addEventListener("input", () => {
 });
 $("#poolFilter").addEventListener("change", loadPool);
 
+$("#btnPurgeDead").addEventListener("click", async () => {
+  // Unabhaengig vom gerade eingestellten Filter zaehlen.
+  const dead = (await api("/pool?status=dead")).length;
+  if (!dead) return toast("Keine toten Einträge im Pool.", "error");
+  if (!confirm(`${dead} tote Einträge endgültig aus dem Pool löschen?`)) return;
+
+  try {
+    await api("/pool?status=dead", { method: "DELETE" });
+    toast(`${dead} tote Einträge gelöscht.`, "ok");
+    await loadPool();
+    loadStats();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
 $("#btnExportPool").addEventListener("click", () => {
   if (!state.pool.length) return toast("Pool ist leer.", "error");
   const rows = [
-    "username,name,status,premium,notiz",
+    "username,name,status,grund,premium,notiz",
     ...state.pool.map((p) =>
-      [p.username, p.display || "", p.status, p.is_premium ? "ja" : "nein", p.note || ""]
+      [
+        p.username,
+        p.display || "",
+        p.status,
+        p.reason || "",
+        p.is_premium ? "ja" : "nein",
+        p.note || "",
+      ]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
     ),
@@ -502,10 +531,11 @@ $("#btnLoadGroups").addEventListener("click", async () => {
 });
 
 function addCandidateCount() {
-  const onlyValid = $("#fOnlyValid").checked;
-  return state.pool.filter((p) =>
-    onlyValid ? p.status === "valid" : !["added", "invalid"].includes(p.status)
-  ).length;
+  // Aus der Gesamtstatistik, nicht aus der gefilterten Tabellenansicht.
+  const s = state.stats;
+  if (!s) return 0;
+  if ($("#fOnlyValid").checked) return s.pool_valid;
+  return Math.max(0, s.pool - s.pool_dead - s.pool_joined);
 }
 
 function renderAddEstimate() {
@@ -667,7 +697,7 @@ function jobSummary(job) {
   }
   if (job.kind === "add") {
     return `${s.done ?? 0}/${s.total ?? 0} · ${s.added ?? 0} aufgenommen · ${
-      s.privacy ?? 0} blockiert`;
+      (s.privacy ?? 0) + (s.failed ?? 0)} tot`;
   }
   return `${s.approved ?? 0} genehmigt · ${s.skipped ?? 0} übersprungen`;
 }

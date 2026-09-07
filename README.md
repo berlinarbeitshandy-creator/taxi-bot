@@ -22,14 +22,15 @@ Einladungen in eine Zielgruppe zu holen.
 - Namen als Liste, Komma-Text oder `t.me/`-Links einfügen — die Erkennung
   läuft automatisch, Duplikate werden übersprungen
 - Prüf-Job löst jeden Namen über einen gebundenen Account auf und markiert
-  tote Namen als ungültig
+  nicht existierende Namen als **tot**
 - Filtern, suchen, als CSV exportieren
 
 **Vorgang — Mitglieder aufnehmen**
 - Nimmt die Pool-Einträge nacheinander in die Zielgruppe auf
 - Pause und Höchstzahl pro Durchlauf einstellbar, mit Dauer-Schätzung
-- Erkennt Privatsphäre-Blockaden, bereits vorhandene Mitglieder und Fehler
-  je Eintrag und schreibt das Ergebnis in den Pool-Status
+- Wer sich nicht aufnehmen lässt — Privatsphäre-Blockade, gelöschter Account,
+  zu viele Gruppen — wird **tot** markiert und fällt aus allen weiteren
+  Durchläufen raus. Der Grund steht daneben im Pool.
 - Stoppt bei PeerFlood von selbst, statt den Account weiter zu verbrennen
 
 **Vorgang — Einladungslink (Alternative)**
@@ -39,6 +40,27 @@ Einladungen in eine Zielgruppe zu holen.
 
 **Protokoll**
 - Fortschritt, Zähler und Live-Log für jeden Job
+
+---
+
+## Pool-Status
+
+| Status | Bedeutung |
+| --- | --- |
+| ungeprüft | Neu eingefügt, noch nicht gegen Telegram geprüft |
+| gültig | Aufgelöst, bereit für die Aufnahme |
+| aufgenommen | In der Zielgruppe — oder war schon drin |
+| beigetreten | Über eine genehmigte Beitrittsanfrage reingekommen |
+| **tot** | Aufnahme unmöglich. Grund steht daneben: *existiert nicht*, *Privatsphäre-Einstellung*, *kein gegenseitiger Kontakt*, *in zu vielen Gruppen*, *Account gelöscht*, *Gruppe voll* |
+
+Tote Einträge werden bei den nächsten Durchläufen übersprungen — sie kosten
+sonst nur Aufnahme-Versuche, die ohnehin gegen das Tageslimit zählen. Über
+den Filter *Tot* siehst du sie gesammelt, **Tote löschen** wirft sie aus dem
+Pool.
+
+Bei *Privatsphäre-Einstellung* lohnt ein zweiter Blick: das ist am Account
+änderbar. Danach den Eintrag neu einfügen oder den Pool ohne den Haken
+„nur ungeprüfte" erneut prüfen.
 
 ---
 

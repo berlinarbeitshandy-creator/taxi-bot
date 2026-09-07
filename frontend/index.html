@@ -228,12 +228,11 @@
                 <option value="all">Alle</option>
                 <option value="new">Ungeprüft</option>
                 <option value="valid">Gültig</option>
-                <option value="invalid">Ungültig</option>
                 <option value="added">Aufgenommen</option>
-                <option value="privacy">Privatsphäre</option>
-                <option value="failed">Fehlgeschlagen</option>
                 <option value="joined">Beigetreten</option>
+                <option value="dead">Tot</option>
               </select>
+              <button class="btn btn-ghost btn-sm" id="btnPurgeDead">Tote löschen</button>
               <button class="btn btn-ghost btn-sm" id="btnExportPool">Export</button>
             </div>
           </div>
@@ -341,9 +340,10 @@
           <div class="divider"></div>
 
           <p class="field-note">
-            Blockiert die Privatsphäre-Einstellung eines Accounts das Aufnehmen,
-            hilft der Weg über den Einladungslink rechts — oder du hinterlegst die
-            Accounts gegenseitig als Kontakt.
+            Wer sich nicht aufnehmen lässt, wird <strong>tot</strong> markiert und
+            fällt aus den nächsten Durchläufen raus — der Grund steht im Pool
+            daneben. Bei „Privatsphäre“ hilft der Einladungslink rechts, oder du
+            hinterlegst die Accounts gegenseitig als Kontakt.
           </p>
         </div>
 

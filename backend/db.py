@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS pool (
     username    TEXT    NOT NULL UNIQUE,
     note        TEXT    NOT NULL DEFAULT '',
     status      TEXT    NOT NULL DEFAULT 'new',
+    reason      TEXT    NOT NULL DEFAULT '',
     tg_user_id  INTEGER,
     display     TEXT,
     is_premium  INTEGER NOT NULL DEFAULT 0,
@@ -79,6 +80,20 @@ def cursor() -> Iterator[sqlite3.Cursor]:
 def init() -> None:
     with cursor() as cur:
         cur.executescript(SCHEMA)
+        _migrate(cur)
+
+
+def _migrate(cur: sqlite3.Cursor) -> None:
+    """Bringt aeltere Datenbanken auf den aktuellen Stand."""
+    columns = {row[1] for row in cur.execute("PRAGMA table_info(pool)").fetchall()}
+    if "reason" not in columns:
+        cur.execute("ALTER TABLE pool ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
+
+    # 'invalid' hiess frueher, was heute 'dead' heisst.
+    cur.execute(
+        "UPDATE pool SET status = 'dead', reason = 'existiert nicht' "
+        "WHERE status = 'invalid'"
+    )
 
 
 def query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
