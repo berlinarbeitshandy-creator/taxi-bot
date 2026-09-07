@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from . import db, jobs, schemas
+from . import db, jobs, quota, schemas
 from . import telegram_manager as tg
 from .devices import DEVICE_PROFILES
 
@@ -66,6 +66,7 @@ def _public_account(row: dict[str, Any]) -> dict[str, Any]:
         "last_error": row["last_error"],
         "last_check": row["last_check"],
         "created_at": row["created_at"],
+        "quota": quota.state(row),
         "proxy": {
             "type": proxy.get("type"),
             "host": proxy.get("host"),
@@ -142,6 +143,14 @@ async def delete_account(account_id: int, logout: bool = True) -> dict[str, bool
             pass
     db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     return {"ok": True}
+
+
+@router.post("/accounts/{account_id}/release")
+def release_quota(account_id: int) -> dict[str, Any]:
+    """Hebt die Aufnahme-Pause sofort auf und setzt den Zähler zurück."""
+    if not db.query_one("SELECT id FROM accounts WHERE id = ?", (account_id,)):
+        raise HTTPException(status_code=404, detail="Account nicht gefunden.")
+    return quota.release(account_id)
 
 
 @router.get("/accounts/{account_id}/groups")

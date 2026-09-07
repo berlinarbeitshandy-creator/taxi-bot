@@ -8,7 +8,7 @@ from typing import Any
 
 from telethon import errors
 
-from . import db, telegram_manager as tg
+from . import db, quota, telegram_manager as tg
 from .config import ADD_DELAY, API_DELAY
 
 _tasks: dict[int, asyncio.Task] = {}
@@ -324,7 +324,21 @@ async def _run_add(
     limit: int,
     only_valid: bool,
 ) -> None:
-    entries = _add_candidates(only_valid, limit)
+    try:
+        allowance = quota.require_free(account_id)
+    except quota.QuotaBlocked as exc:
+        _append_log(
+            job_id,
+            "error",
+            f"{exc} Entweder abwarten oder den Account unter „Accounts“ freigeben.",
+        )
+        _finish(job_id, "error")
+        return
+
+    # Nie mehr einplanen, als der Account noch darf.
+    room = allowance["remaining"]
+    entries = _add_candidates(only_valid, min(limit, room) if limit else room)
+
     stats = {
         "total": len(entries),
         "done": 0,
@@ -332,12 +346,15 @@ async def _run_add(
         "already": 0,
         "privacy": 0,
         "failed": 0,
+        "quota_used": allowance["used"],
+        "quota_limit": allowance["limit"],
     }
     _set_stats(job_id, stats)
     _append_log(
         job_id,
         "info",
-        f"{len(entries)} Einträge, Pause {delay:.0f}s zwischen den Aufnahmen.",
+        f"{len(entries)} Einträge, Pause {delay:.0f}s zwischen den Aufnahmen. "
+        f"Kontingent: {allowance['used']}/{allowance['limit']} verbraucht.",
     )
 
     if not entries:
@@ -368,6 +385,7 @@ async def _run_add(
                     except errors.PeerFloodError:
                         # Telegram hat den Account als auffaellig eingestuft.
                         # Weitermachen kostet hier den Account, nicht nur den Job.
+                        quota.record_attempt(account_id)
                         _append_log(
                             job_id,
                             "error",
@@ -393,7 +411,21 @@ async def _run_add(
                 _append_log(job_id, level, f"@{username}: {message}")
 
                 stats["done"] += 1
+
+                allowance = quota.record_attempt(account_id)
+                stats["quota_used"] = allowance["used"]
                 _set_stats(job_id, stats)
+
+                if allowance["blocked"]:
+                    _append_log(
+                        job_id,
+                        "warn",
+                        f"Kontingent erreicht: {allowance['used']} von "
+                        f"{allowance['limit']} Aufnahmen. Der Account pausiert "
+                        f"{allowance['cooldown_text']} — oder du gibst ihn unter "
+                        "„Accounts“ von Hand frei.",
+                    )
+                    break
 
                 if index < len(entries) - 1:
                     await asyncio.sleep(delay)

@@ -23,6 +23,12 @@ API_DELAY = float(os.getenv("PANEL_API_DELAY", "1.5"))
 # begrenzt diese Aktion deutlich strenger als reine Lesezugriffe.
 ADD_DELAY = float(os.getenv("PANEL_ADD_DELAY", "45"))
 
+# Wie viele Aufnahme-Versuche ein Account machen darf, bevor er pausiert.
+ADD_QUOTA = int(os.getenv("PANEL_ADD_QUOTA", "40"))
+
+# Wie lange die Pause dauert, wenn sie nicht vorher freigegeben wird.
+COOLDOWN_HOURS = float(os.getenv("PANEL_COOLDOWN_HOURS", "10"))
+
 # Abbruch, wenn Telegram nicht erreichbar ist (Firewall, toter Proxy).
 CONNECT_TIMEOUT = float(os.getenv("PANEL_CONNECT_TIMEOUT", "25"))
 

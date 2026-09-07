@@ -33,6 +33,14 @@ Einladungen in eine Zielgruppe zu holen.
   Durchläufen raus. Der Grund steht daneben im Pool.
 - Stoppt bei PeerFlood von selbst, statt den Account weiter zu verbrennen
 
+**Kontingent je Account**
+- Jeder Account darf 40 Aufnahme-Versuche machen, dann pausiert er
+- Die Pause endet nach 10 Stunden von selbst — oder sofort, wenn du den
+  Account unter *Accounts* freigibst
+- Der Stand steht am Account, bei laufender Pause mit Countdown
+- Ein Durchlauf plant nie mehr ein, als der Account noch darf, und ein Job
+  startet gar nicht erst, solange der Account pausiert
+
 **Vorgang — Einladungslink (Alternative)**
 - Einladungslink für die Zielgruppe erzeugen — mit Beitrittsanfrage
 - Auto-Approve-Job: offene Beitrittsanfragen werden gegen den Pool geprüft
@@ -70,7 +78,11 @@ Bei *Privatsphäre-Einstellung* lohnt ein zweiter Blick: das ist am Account
 selbst kontrollierst. Grenzen setzt Telegram, nicht das Panel:
 
 - Das Aufnehmen ist deutlich strenger begrenzt als Lesezugriffe. Bewährt sind
-  45 Sekunden oder mehr Pause und höchstens 20–30 Aufnahmen pro Account und Tag.
+  45 Sekunden oder mehr Pause. Nach 40 Versuchen pausiert der Account
+  automatisch für 10 Stunden — beide Werte sind in der `.env` einstellbar.
+- Gezählt wird **jeder** Versuch, der Telegram erreicht hat, auch ein
+  abgelehnter: Telegram zählt Anfragen, nicht Erfolge, und gerade die
+  abgelehnten lösen die Sperre aus.
 - Bei `FloodWaitError` wartet das Panel die geforderte Zeit ab und macht weiter.
 - Bei `PeerFloodError` hat Telegram den Account als auffällig eingestuft. Der
   Job stoppt dann sofort — weiterzumachen kostet den Account, nicht nur den Job.
@@ -121,6 +133,8 @@ Alles über `.env` (siehe `.env.example`):
 | `PANEL_HOST` / `PANEL_PORT` | Bind-Adresse | `127.0.0.1:8000` |
 | `PANEL_API_DELAY` | Pause zwischen einzelnen Telegram-Aufrufen in Sekunden | `1.5` |
 | `PANEL_ADD_DELAY` | Vorgabe für die Pause zwischen zwei Aufnahmen | `45` |
+| `PANEL_ADD_QUOTA` | Aufnahme-Versuche je Account, dann pausiert er | `40` |
+| `PANEL_COOLDOWN_HOURS` | Dauer der Pause, wenn nicht von Hand freigegeben | `10` |
 | `PANEL_CONNECT_TIMEOUT` | Abbruch, wenn Telegram nicht erreichbar ist | `25` |
 
 > **Wichtig:** Änderst du `PANEL_SECRET_KEY` nachträglich, lassen sich
@@ -151,6 +165,7 @@ backend/
   devices.py            Geräteprofile
   telegram_manager.py   Telethon: Login, Client-Pool, Gruppen, Aufnahme
   jobs.py               Hintergrund-Jobs (Prüfung, Aufnahme, Auto-Approve)
+  quota.py              Aufnahme-Kontingent, Pause und Freigabe je Account
   schemas.py            Pydantic-Modelle
   api.py                HTTP-Endpunkte
   main.py               FastAPI-App, Basic-Auth, statisches Frontend

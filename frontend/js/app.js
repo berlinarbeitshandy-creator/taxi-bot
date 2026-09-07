@@ -129,6 +129,56 @@ const STATUS_BADGE = {
   error:   ["badge-danger", "Fehler"],
 };
 
+function countdown(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h
+    ? `${h} Std. ${String(m).padStart(2, "0")} Min.`
+    : `${m}:${String(sec).padStart(2, "0")} Min.`;
+}
+
+function renderQuota(account) {
+  const q = account.quota;
+  const percent = Math.min(100, Math.round((q.used / q.limit) * 100));
+  const bar = `<div class="quota-bar"><i class="${
+    q.blocked ? "is-full" : ""}" style="width:${percent}%"></i></div>`;
+
+  if (q.blocked) {
+    return `
+      <div class="quota quota--blocked">
+        <div class="quota-head">
+          <span>Kontingent aufgebraucht — ${q.used}/${q.limit}</span>
+          <strong data-until="${q.cooldown_until}">frei in ${esc(
+            countdown(q.seconds_left))}</strong>
+        </div>
+        ${bar}
+      </div>`;
+  }
+
+  return `
+    <div class="quota">
+      <div class="quota-head">
+        <span>Kontingent</span>
+        <strong>${q.used}/${q.limit}</strong>
+      </div>
+      ${bar}
+    </div>`;
+}
+
+// Laesst die Countdowns weiterlaufen, ohne die Liste neu zu bauen.
+setInterval(() => {
+  $$("[data-until]").forEach((el) => {
+    const left = Number(el.dataset.until) - Date.now() / 1000;
+    if (left <= 0) {
+      el.textContent = "Pause vorbei";
+      return;
+    }
+    el.textContent = `frei in ${countdown(left)}`;
+  });
+}, 1000);
+
 function renderAccounts() {
   const box = $("#accountList");
   if (!state.accounts.length) {
@@ -157,9 +207,13 @@ function renderAccounts() {
           </div>
         </div>
         <div class="account-actions">
+          ${a.quota.blocked
+            ? `<button class="btn btn-sm btn-primary" data-release="${a.id}">Freigeben</button>`
+            : ""}
           <button class="btn btn-ghost btn-sm" data-refresh="${a.id}">Prüfen</button>
           <button class="btn btn-ghost btn-sm btn-danger" data-remove="${a.id}">Lösen</button>
         </div>
+        ${renderQuota(a)}
         ${a.last_error ? `<div class="account-error">${esc(a.last_error)}</div>` : ""}
       </div>`;
   }).join("");
@@ -169,6 +223,7 @@ async function loadAccounts() {
   state.accounts = await api("/accounts");
   renderAccounts();
   fillAccountSelects();
+  renderAddEstimate();
 }
 
 function fillAccountSelects() {
@@ -189,6 +244,18 @@ function fillAccountSelects() {
 $("#accountList").addEventListener("click", async (e) => {
   const refresh = e.target.closest("[data-refresh]");
   const remove = e.target.closest("[data-remove]");
+  const release = e.target.closest("[data-release]");
+
+  if (release) {
+    try {
+      await api(`/accounts/${release.dataset.release}/release`, { method: "POST" });
+      toast("Account freigegeben — Zähler zurückgesetzt.", "ok");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+    await loadAccounts();
+    loadStats();
+  }
 
   if (refresh) {
     refresh.disabled = true;
@@ -538,25 +605,48 @@ function addCandidateCount() {
   return Math.max(0, s.pool - s.pool_dead - s.pool_joined);
 }
 
+function selectedOpAccount() {
+  const id = Number($("#fOpAccount").value);
+  return state.accounts.find((a) => a.id === id) || null;
+}
+
 function renderAddEstimate() {
+  const box = $("#addEstimate");
+  const account = selectedOpAccount();
+
+  if (account?.quota.blocked) {
+    box.textContent =
+      `Kontingent aufgebraucht (${account.quota.used}/${account.quota.limit})` +
+      ` — frei in ${countdown(account.quota.seconds_left)}, oder unter „Accounts“ freigeben.`;
+    return;
+  }
+
   const delay = Number($("#fAddDelay").value);
   const limit = Number($("#fAddLimit").value);
   const available = addCandidateCount();
-  const count = limit ? Math.min(limit, available) : available;
+  // Der Account bremst genauso wie der Pool.
+  const room = account ? account.quota.remaining : available;
+  const count = Math.min(limit || available, available, room);
 
   if (!count) {
-    $("#addEstimate").textContent = $("#fOnlyValid").checked
-      ? "Keine geprüften Einträge — erst den Pool prüfen."
-      : "Keine offenen Einträge im Pool.";
+    box.textContent = !available
+      ? ($("#fOnlyValid").checked
+          ? "Keine geprüften Einträge — erst den Pool prüfen."
+          : "Keine offenen Einträge im Pool.")
+      : "Kontingent des Accounts ist aufgebraucht.";
     return;
   }
+
   const minutes = Math.round(((count - 1) * delay) / 60);
   const duration = minutes < 1 ? "unter einer Minute" : `rund ${minutes} Minuten`;
-  $("#addEstimate").textContent =
-    `${count} von ${available} Einträgen · Dauer ${duration}.`;
+  const quotaNote = account
+    ? ` · Kontingent danach ${account.quota.used + count}/${account.quota.limit}`
+    : "";
+  box.textContent =
+    `${count} von ${available} Einträgen · Dauer ${duration}${quotaNote}.`;
 }
 
-["#fAddDelay", "#fAddLimit", "#fOnlyValid"].forEach((sel) =>
+["#fAddDelay", "#fAddLimit", "#fOnlyValid", "#fOpAccount"].forEach((sel) =>
   $(sel).addEventListener("change", renderAddEstimate)
 );
 
@@ -565,6 +655,15 @@ $("#btnStartAdd").addEventListener("click", async () => {
   const target = $("#fOpGroup").value;
   if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
   if (!addCandidateCount()) return toast("Keine passenden Pool-Einträge.", "error");
+
+  const account = selectedOpAccount();
+  if (account?.quota.blocked) {
+    // countdown() endet bereits mit einem Abkürzungspunkt.
+    return toast(
+      `Kontingent aufgebraucht — frei in ${countdown(account.quota.seconds_left)}`,
+      "error"
+    );
+  }
 
   try {
     const res = await api("/jobs/add", {

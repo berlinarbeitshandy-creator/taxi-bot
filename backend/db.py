@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     is_premium    INTEGER NOT NULL DEFAULT 0,
     last_error    TEXT,
     last_check    REAL,
+    adds_used     INTEGER NOT NULL DEFAULT 0,
+    cooldown_until REAL,
     created_at    REAL    NOT NULL
 );
 
@@ -88,6 +90,14 @@ def _migrate(cur: sqlite3.Cursor) -> None:
     columns = {row[1] for row in cur.execute("PRAGMA table_info(pool)").fetchall()}
     if "reason" not in columns:
         cur.execute("ALTER TABLE pool ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
+
+    columns = {row[1] for row in cur.execute("PRAGMA table_info(accounts)").fetchall()}
+    if "adds_used" not in columns:
+        cur.execute(
+            "ALTER TABLE accounts ADD COLUMN adds_used INTEGER NOT NULL DEFAULT 0"
+        )
+    if "cooldown_until" not in columns:
+        cur.execute("ALTER TABLE accounts ADD COLUMN cooldown_until REAL")
 
     # 'invalid' hiess frueher, was heute 'dead' heisst.
     cur.execute(
