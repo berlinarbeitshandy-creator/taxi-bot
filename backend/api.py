@@ -1,18 +1,15 @@
 """HTTP-Endpunkte des Panels."""
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from . import db, jobs, quota, schemas
+from . import db, jobs, quota, schemas, usernames
 from . import telegram_manager as tg
 from .devices import DEVICE_PROFILES
 
 router = APIRouter(prefix="/api")
-
-USERNAME_RE = re.compile(r"[A-Za-z0-9_]{4,32}")
 
 
 def _fail(exc: Exception) -> HTTPException:
@@ -31,8 +28,9 @@ def devices() -> list[dict[str, str]]:
 @router.get("/stats")
 def stats() -> dict[str, Any]:
     accounts = db.query("SELECT status, is_premium FROM accounts")
-    pool = db.query("SELECT status FROM pool")
+    pool = db.query("SELECT status, username FROM pool")
     running = db.query_one("SELECT COUNT(*) AS c FROM jobs WHERE status = 'running'")
+    junk = [p for p in pool if not usernames.is_valid(p["username"])]
     return {
         "accounts": len(accounts),
         "accounts_online": sum(1 for a in accounts if a["status"] == "online"),
@@ -40,6 +38,9 @@ def stats() -> dict[str, Any]:
         "pool": len(pool),
         "pool_valid": sum(1 for p in pool if p["status"] == "valid"),
         "pool_dead": sum(1 for p in pool if p["status"] == "dead"),
+        # Altlasten aus einer zu grosszuegigen Erkennung.
+        "pool_invalid": len(junk),
+        "pool_invalid_examples": [p["username"] for p in junk[:4]],
         # Noch keinem Account zugewiesen - das ist es, was ein Start verteilen kann.
         "pool_free_valid": jobs.available_count(True),
         "pool_free_open": jobs.available_count(False),
@@ -195,7 +196,7 @@ def list_pool(status: str | None = None, q: str | None = None) -> list[dict[str,
 
 @router.post("/pool")
 def add_pool(payload: schemas.PoolAdd) -> dict[str, Any]:
-    found = USERNAME_RE.findall(payload.usernames.replace("t.me/", " "))
+    found, rejected = usernames.extract(payload.usernames)
     added, skipped = 0, 0
     for raw in found:
         username = raw.lower()
@@ -208,7 +209,24 @@ def add_pool(payload: schemas.PoolAdd) -> dict[str, Any]:
             (raw, payload.note, "new", db.now()),
         )
         added += 1
-    return {"added": added, "skipped": skipped, "parsed": len(found)}
+    return {
+        "added": added,
+        "skipped": skipped,
+        "parsed": len(found),
+        # Was kein Telegram-Name sein kann - Zahlen, Bruchstuecke, zu kurz.
+        "invalid": len(rejected),
+        "invalid_examples": rejected[:5],
+    }
+
+
+@router.post("/pool/cleanup")
+def cleanup_pool() -> dict[str, Any]:
+    """Wirft Eintraege raus, die keine gültigen Telegram-Namen sein können."""
+    rows = db.query("SELECT id, username FROM pool")
+    doomed = [r for r in rows if not usernames.is_valid(r["username"])]
+    for row in doomed:
+        db.execute("DELETE FROM pool WHERE id = ?", (row["id"],))
+    return {"removed": len(doomed), "examples": [r["username"] for r in doomed[:5]]}
 
 
 @router.patch("/pool/{entry_id}")

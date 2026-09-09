@@ -21,6 +21,10 @@ Einladungen in eine Zielgruppe zu holen.
 **@username Pool**
 - Namen als Liste, Komma-Text oder `t.me/`-Links einfügen — die Erkennung
   läuft automatisch, Duplikate werden übersprungen
+- Steht irgendwo ein `@`, zählen nur die @-Namen. Du kannst also eine ganze
+  Tabelle einfügen, ohne dass Spaltentexte im Pool landen
+- Was kein Telegram-Name sein kann (reine Zahlen, unter 5 Zeichen, beginnt
+  nicht mit einem Buchstaben), wird abgewiesen und beim Einfügen gemeldet
 - Prüf-Job löst jeden Namen über einen gebundenen Account auf und markiert
   nicht existierende Namen als **tot**
 - Filtern, suchen, als CSV exportieren

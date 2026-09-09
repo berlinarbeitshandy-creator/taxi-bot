@@ -119,6 +119,22 @@ async function loadStats() {
   badge.hidden = !s.jobs_running;
   badge.textContent = s.jobs_running;
 
+  // Altlasten: Einträge, die gar kein Telegram-Name sein können.
+  const junk = s.pool_invalid || 0;
+  $("#poolCleanup").hidden = !junk;
+  if (junk) {
+    $("#poolCleanupText").textContent = junk === 1
+      ? "1 Eintrag ist kein gültiger Telegram-Name."
+      : `${junk} Einträge sind keine gültigen Telegram-Namen.`;
+
+    const beispiele = (s.pool_invalid_examples || []).map((n) => "@" + n);
+    const regel =
+      "Namen müssen mit einem Buchstaben beginnen und mindestens 5 Zeichen haben.";
+    $("#poolCleanupExamples").textContent = beispiele.length
+      ? ` ${beispiele.join(", ")}${junk > beispiele.length ? " …" : ""} — ${regel}`
+      : ` ${regel}`;
+  }
+
   renderAddEstimate();
 }
 
@@ -550,7 +566,16 @@ $("#poolForm").addEventListener("submit", async (e) => {
       method: "POST",
       body: { usernames: raw, note: $("#fPoolNote").value.trim() },
     });
-    toast(`${res.added} hinzugefügt, ${res.skipped} Duplikate übersprungen.`, "ok");
+    const teile = [`${res.added} hinzugefügt`];
+    if (res.skipped) teile.push(`${res.skipped} Duplikate`);
+    if (res.invalid) {
+      teile.push(
+        `${res.invalid} ungültig (${res.invalid_examples
+          .slice(0, 3)
+          .join(", ")}${res.invalid > 3 ? " …" : ""})`
+      );
+    }
+    toast(teile.join(" · ") + ".", res.added ? "ok" : "error");
     $("#fPoolNames").value = "";
     await loadPool();
     loadStats();
@@ -573,6 +598,20 @@ $("#poolSearch").addEventListener("input", () => {
   searchTimer = setTimeout(loadPool, 250);
 });
 $("#poolFilter").addEventListener("change", loadPool);
+
+$("#btnCleanupPool").addEventListener("click", async () => {
+  const btn = $("#btnCleanupPool");
+  btn.disabled = true;
+  try {
+    const res = await api("/pool/cleanup", { method: "POST" });
+    toast(`${res.removed} ungültige Einträge entfernt.`, "ok");
+    await loadPool();
+    await loadStats();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+  btn.disabled = false;
+});
 
 $("#btnPurgeDead").addEventListener("click", async () => {
   // Unabhaengig vom gerade eingestellten Filter zaehlen.
