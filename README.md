@@ -156,19 +156,31 @@ wahlweise nur die, deren Absender im Pool steht.
 
 ## Installation
 
-```bash
-git clone <repo>
-cd taxi-bot
+**Der einfache Weg** — Python 3.11+ muss installiert sein
+(<https://www.python.org/downloads/>, unter Windows beim Installieren
+„Add Python to PATH" ankreuzen):
 
+| System | Datei |
+| --- | --- |
+| Windows | Doppelklick auf `start.bat` |
+| macOS / Linux | `./start.sh` im Terminal |
+
+Beim ersten Start richtet das Skript alles ein — das dauert ein bis zwei
+Minuten. Danach geht es sofort los, und der Browser öffnet sich von selbst
+auf <http://127.0.0.1:8000>.
+
+**Von Hand**, wenn du lieber selbst tippst:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-cp .env.example .env
+cp .env.example .env             # Windows: copy .env.example .env
 python run.py
 ```
 
-Panel öffnen: <http://127.0.0.1:8000>
+Das Fenster muss offen bleiben, solange das Panel läuft — dort steckt der
+Server. Beenden mit `Strg+C`.
 
 ### API-Zugang besorgen
 
