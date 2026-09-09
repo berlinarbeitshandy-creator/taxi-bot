@@ -307,6 +307,16 @@ def job_detail(job_id: int) -> dict[str, Any]:
     return job
 
 
+@router.post("/jobs/{job_id}/resume")
+async def job_resume(job_id: int) -> dict[str, bool]:
+    """Das „Go“ für einen pausierten Vorgang."""
+    try:
+        jobs.resume_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
 @router.post("/jobs/{job_id}/cancel")
 def job_cancel(job_id: int) -> dict[str, bool]:
     return {"ok": jobs.cancel_job(job_id)}

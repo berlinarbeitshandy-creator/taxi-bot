@@ -844,6 +844,7 @@ const JOB_LABEL = {
 };
 const JOB_BADGE = {
   running:     ["badge-accent", "läuft"],
+  paused:      ["badge-warn", "pausiert"],
   done:        ["badge-ok", "fertig"],
   error:       ["badge-danger", "Fehler"],
   cancelled:   ["badge-warn", "abgebrochen"],
@@ -909,7 +910,8 @@ async function loadJobs() {
 async function loadJobDetail(jobId) {
   const job = await api(`/jobs/${jobId}`);
   state.activeJob = jobId;
-  $("#btnCancelJob").hidden = job.status !== "running";
+  $("#btnCancelJob").hidden = !["running", "paused"].includes(job.status);
+  $("#btnResumeJob").hidden = job.status !== "paused";
 
   const s = job.stats || {};
   const hasProgress = ["pool_check", "add"].includes(job.kind) && s.total;
@@ -935,6 +937,20 @@ document.addEventListener("click", (e) => {
   if (!mini) return;
   showView("jobs");
   loadJobDetail(Number(mini.dataset.job));
+});
+
+$("#btnResumeJob").addEventListener("click", async () => {
+  if (!state.activeJob) return;
+  const btn = $("#btnResumeJob");
+  btn.disabled = true;
+  try {
+    await api(`/jobs/${state.activeJob}/resume`, { method: "POST" });
+    toast("Go — Vorgang läuft weiter.", "ok");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+  btn.disabled = false;
+  loadJobs();
 });
 
 $("#btnCancelJob").addEventListener("click", async () => {
@@ -969,10 +985,7 @@ async function boot() {
   state.poller = setInterval(async () => {
     try {
       await loadStats();
-      const hasRunning = state.jobs.some((j) => j.status === "running");
-      if (hasRunning || !$('.view[data-view="jobs"]').classList.contains("is-active")) {
-        if (hasRunning) await loadJobs();
-      }
+      if (state.jobs.some((j) => j.status === "running")) await loadJobs();
     } catch { /* Panel bleibt bedienbar */ }
   }, 3000);
 }

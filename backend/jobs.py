@@ -18,11 +18,25 @@ _tasks: dict[int, asyncio.Task] = {}
 # Job-Buchhaltung
 # --------------------------------------------------------------------------
 
-def create_job(kind: str, account_id: int | None, target: str) -> int:
+def create_job(
+    kind: str,
+    account_id: int | None,
+    target: str,
+    params: dict[str, Any] | None = None,
+) -> int:
     return db.execute(
-        "INSERT INTO jobs (kind, account_id, target, status, stats, log, created_at)"
-        " VALUES (?,?,?,?,?,?,?)",
-        (kind, account_id, target, "running", "{}", "[]", db.now()),
+        "INSERT INTO jobs (kind, account_id, target, status, params, stats, log,"
+        " created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (
+            kind,
+            account_id,
+            target,
+            "running",
+            db.dumps(params or {}),
+            "{}",
+            "[]",
+            db.now(),
+        ),
     )
 
 
@@ -50,7 +64,21 @@ def get_job(job_id: int) -> dict[str, Any] | None:
         return None
     job["stats"] = db.loads(job["stats"], {})
     job["log"] = db.loads(job["log"], [])
+    job["params"] = db.loads(job.get("params"), {})
     return job
+
+
+def _pause(job_id: int, message: str) -> None:
+    """Haelt den Job an, ohne ihn zu beenden.
+
+    Die dem Account zugewiesenen Eintraege bleiben reserviert, damit ein
+    spaeteres Fortsetzen genau dort weitermacht, wo es aufgehoert hat.
+    """
+    _append_log(job_id, "warn", message)
+    db.execute(
+        "UPDATE jobs SET status = 'paused', finished_at = ? WHERE id = ?",
+        (db.now(), job_id),
+    )
 
 
 def list_jobs(limit: int = 30) -> list[dict[str, Any]]:
@@ -68,6 +96,15 @@ def cancel_job(job_id: int) -> bool:
     task = _tasks.get(job_id)
     if task and not task.done():
         task.cancel()
+        return True
+
+    # Ein pausierter Job haelt keine Task mehr, aber noch seine Eintraege.
+    job = db.query_one("SELECT * FROM jobs WHERE id = ?", (job_id,))
+    if job and job["status"] == "paused":
+        _append_log(job_id, "warn", "Abgebrochen — Reservierungen freigegeben.")
+        _finish(job_id, "cancelled")
+        if job["account_id"]:
+            release_claims(job["account_id"])
         return True
     return False
 
@@ -301,9 +338,41 @@ def start_add(
     limit: int = 0,
     only_valid: bool = True,
 ) -> int:
-    job_id = create_job("add", account_id, target)
+    job_id = create_job(
+        "add",
+        account_id,
+        target,
+        {"delay": delay, "limit": limit, "only_valid": only_valid},
+    )
     _spawn(job_id, _run_add(job_id, account_id, target, delay, limit, only_valid))
     return job_id
+
+
+def resume_job(job_id: int) -> None:
+    """Setzt einen pausierten Vorgang fort — das „Go“."""
+    job = get_job(job_id)
+    if not job:
+        raise ValueError("Job nicht gefunden.")
+    if job["status"] != "paused":
+        raise ValueError("Dieser Vorgang ist nicht pausiert.")
+
+    params = job["params"]
+    _append_log(job_id, "info", "Go — Vorgang wird fortgesetzt.")
+    db.execute(
+        "UPDATE jobs SET status = 'running', finished_at = NULL WHERE id = ?",
+        (job_id,),
+    )
+    _spawn(
+        job_id,
+        _run_add(
+            job_id,
+            job["account_id"],
+            job["target"],
+            params.get("delay", ADD_DELAY),
+            params.get("limit", 0),
+            params.get("only_valid", True),
+        ),
+    )
 
 
 def _status_filter(only_valid: bool) -> str:
@@ -363,6 +432,23 @@ def claim_candidates(
     return (mine + fresh)[:limit] if limit else mine + fresh
 
 
+def release_orphaned_claims() -> None:
+    """Beim Panelstart aufraeumen, aber pausierte Vorgaenge nicht anfassen.
+
+    Ein pausierter Job wartet auf sein „Go“ — auch ueber einen Neustart
+    hinweg. Seine Eintraege muessen ihm erhalten bleiben.
+    """
+    paused = {
+        row["account_id"]
+        for row in db.query("SELECT DISTINCT account_id FROM jobs WHERE status = 'paused'")
+        if row["account_id"]
+    }
+    for row in db.query("SELECT DISTINCT assigned_to FROM pool WHERE assigned_to IS NOT NULL"):
+        account_id = row["assigned_to"]
+        if account_id not in paused:
+            release_claims(account_id)
+
+
 def release_claims(account_id: int | None = None) -> None:
     """Gibt noch unbearbeitete Zuweisungen wieder frei."""
     if account_id is None:
@@ -389,8 +475,11 @@ async def _run_add(
     try:
         await _add_loop(job_id, account_id, target, delay, limit, only_valid)
     finally:
-        # Was dieser Lauf nicht geschafft hat, gehoert wieder allen.
-        release_claims(account_id)
+        # Ein pausierter Job behaelt seine Eintraege - er macht spaeter
+        # genau dort weiter. Sonst gehoeren sie wieder allen.
+        row = db.query_one("SELECT status FROM jobs WHERE id = ?", (job_id,))
+        if not row or row["status"] != "paused":
+            release_claims(account_id)
 
 
 async def _add_loop(
@@ -416,13 +505,20 @@ async def _add_loop(
     room = allowance["remaining"]
     entries = claim_candidates(account_id, only_valid, min(limit, room) if limit else room)
 
+    # Beim Fortsetzen zaehlen wir weiter, statt bei null anzufangen.
+    previous = db.loads(
+        (db.query_one("SELECT stats FROM jobs WHERE id = ?", (job_id,)) or {}).get(
+            "stats"
+        ),
+        {},
+    )
     stats = {
-        "total": len(entries),
-        "done": 0,
-        "added": 0,
-        "already": 0,
-        "privacy": 0,
-        "failed": 0,
+        "total": previous.get("done", 0) + len(entries),
+        "done": previous.get("done", 0),
+        "added": previous.get("added", 0),
+        "already": previous.get("already", 0),
+        "privacy": previous.get("privacy", 0),
+        "failed": previous.get("failed", 0),
         "quota_used": allowance["used"],
         "quota_limit": allowance["limit"],
     }
@@ -461,16 +557,18 @@ async def _add_loop(
                         continue
                     except errors.PeerFloodError:
                         # Telegram hat den Account als auffaellig eingestuft.
-                        # Weitermachen kostet hier den Account, nicht nur den Job.
+                        # Weitermachen kostet hier den Account, nicht nur den
+                        # Job - also anhalten und auf ein Go warten.
                         quota.record_attempt(account_id)
-                        _append_log(
+                        _pause(
                             job_id,
-                            "error",
                             "Telegram hat den Account vorläufig für diese Aktion "
-                            "gesperrt (PeerFlood). Job gestoppt — später mit "
-                            "größerer Pause erneut versuchen.",
+                            "gesperrt (PeerFlood). Vorgang pausiert bei "
+                            f"{stats['done']} von {stats['total']} — die "
+                            "restlichen Einträge bleiben reserviert. Mit „Go“ "
+                            "geht es weiter; vorher ein paar Stunden warten, "
+                            "sonst kommt die Sperre sofort wieder.",
                         )
-                        _finish(job_id, "error")
                         return
                     break
 

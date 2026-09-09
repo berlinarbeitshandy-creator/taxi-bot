@@ -31,7 +31,8 @@ Einladungen in eine Zielgruppe zu holen.
 - Wer sich nicht aufnehmen lässt — Privatsphäre-Blockade, gelöschter Account,
   zu viele Gruppen — wird **tot** markiert und fällt aus allen weiteren
   Durchläufen raus. Der Grund steht daneben im Pool.
-- Stoppt bei PeerFlood von selbst, statt den Account weiter zu verbrennen
+- Pausiert bei PeerFlood, statt den Account weiter zu verbrennen — und
+  wartet auf dein **Go**, bevor es weitergeht
 
 **Mehrere Accounts gleichzeitig**
 - Im Vorgang mehrere Accounts ankreuzen — jeder bekommt einen eigenen Job,
@@ -102,7 +103,12 @@ selbst kontrollierst. Grenzen setzt Telegram, nicht das Panel:
   abgelehnten lösen die Sperre aus.
 - Bei `FloodWaitError` wartet das Panel die geforderte Zeit ab und macht weiter.
 - Bei `PeerFloodError` hat Telegram den Account als auffällig eingestuft. Der
-  Job stoppt dann sofort — weiterzumachen kostet den Account, nicht nur den Job.
+  Vorgang **pausiert** dann sofort — weiterzumachen kostet den Account, nicht
+  nur den Job. Er bleibt stehen, bis du im Protokoll **Go** drückst, und macht
+  dann genau bei dem Eintrag weiter, an dem er aufgehört hat. Die restlichen
+  Einträge bleiben so lange für diesen Account reserviert, auch über einen
+  Neustart des Panels hinweg. Vor dem Go ein paar Stunden warten — sonst steht
+  die Sperre sofort wieder da.
 - Steht die Privatsphäre-Einstellung „Wer kann mich zu Gruppen hinzufügen“ auf
   *Meine Kontakte*, scheitert die Aufnahme. Abhilfe: die Einstellung im
   betroffenen Account ändern oder die Accounts gegenseitig als Kontakt

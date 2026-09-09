@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     account_id  INTEGER,
     target      TEXT    NOT NULL DEFAULT '',
     status      TEXT    NOT NULL DEFAULT 'queued',
+    params      TEXT    NOT NULL DEFAULT '{}',
     stats       TEXT    NOT NULL DEFAULT '{}',
     log         TEXT    NOT NULL DEFAULT '[]',
     created_at  REAL    NOT NULL,
@@ -101,6 +102,10 @@ def _migrate(cur: sqlite3.Cursor) -> None:
         )
     if "cooldown_until" not in columns:
         cur.execute("ALTER TABLE accounts ADD COLUMN cooldown_until REAL")
+
+    columns = {row[1] for row in cur.execute("PRAGMA table_info(jobs)").fetchall()}
+    if "params" not in columns:
+        cur.execute("ALTER TABLE jobs ADD COLUMN params TEXT NOT NULL DEFAULT '{}'")
 
     # 'invalid' hiess frueher, was heute 'dead' heisst.
     cur.execute(

@@ -21,8 +21,9 @@ async def lifespan(_app: FastAPI):
         "UPDATE jobs SET status = 'interrupted', finished_at = ? WHERE status = 'running'",
         (db.now(),),
     )
-    # Zuweisungen aus abgebrochenen Laeufen wieder freigeben.
-    jobs.release_claims()
+    # Zuweisungen aus abgebrochenen Laeufen freigeben - pausierte Vorgaenge
+    # behalten ihre Eintraege und warten weiter auf ihr „Go“.
+    jobs.release_orphaned_claims()
     yield
 
 
