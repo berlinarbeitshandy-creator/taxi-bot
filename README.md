@@ -33,6 +33,14 @@ Einladungen in eine Zielgruppe zu holen.
   Durchläufen raus. Der Grund steht daneben im Pool.
 - Stoppt bei PeerFlood von selbst, statt den Account weiter zu verbrennen
 
+**Mehrere Accounts gleichzeitig**
+- Im Vorgang mehrere Accounts ankreuzen — jeder bekommt einen eigenen Job,
+  alle laufen parallel
+- Der Pool wird fest aufgeteilt: jeder Account bekommt seinen eigenen Block
+  zugewiesen, zwei greifen nie nach demselben Namen
+- Die Aufteilung steht in der Vorschau, bevor du startest
+- Zwei Accounts sind also doppelt so schnell durch, nicht doppelt so lang
+
 **Kontingent je Account**
 - Jeder Account darf 40 Aufnahme-Versuche machen, dann pausiert er
 - Die Pause endet nach 10 Stunden von selbst — oder sofort, wenn du den
@@ -60,6 +68,15 @@ Einladungen in eine Zielgruppe zu holen.
 | aufgenommen | In der Zielgruppe — oder war schon drin |
 | beigetreten | Über eine genehmigte Beitrittsanfrage reingekommen |
 | **tot** | Aufnahme unmöglich. Grund steht daneben: *existiert nicht*, *Privatsphäre-Einstellung*, *kein gegenseitiger Kontakt*, *in zu vielen Gruppen*, *Account gelöscht*, *Gruppe voll* |
+
+Der Pool ist dauerhaft — er liegt in der SQLite-Datei unter `data/`. Du
+kannst jederzeit neue Namen nachlegen, auch Wochen später: Panel starten,
+Namen einfügen, prüfen, weitermachen. Schon aufgenommene Einträge werden
+bei jedem weiteren Durchlauf übersprungen.
+
+Läuft gerade ein Vorgang, sind die Einträge dieses Durchlaufs dem jeweiligen
+Account **zugewiesen** und für andere Accounts gesperrt. Die Zuweisung wird
+freigegeben, sobald der Job endet — auch wenn er abbricht.
 
 Tote Einträge werden bei den nächsten Durchläufen übersprungen — sie kosten
 sonst nur Aufnahme-Versuche, die ohnehin gegen das Tageslimit zählen. Über

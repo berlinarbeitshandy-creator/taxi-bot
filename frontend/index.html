@@ -291,20 +291,23 @@
 
       <div class="card card--form card--lead">
         <div class="card-head"><h2>1 · Zielgruppe</h2></div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="fOpAccount">Account</label>
-            <select id="fOpAccount"></select>
-          </div>
-          <div class="field">
-            <label for="fOpGroup">Gruppe</label>
-            <div class="row">
-              <select id="fOpGroup"><option value="">– Gruppen laden –</option></select>
-              <button class="btn btn-ghost btn-sm" id="btnLoadGroups">Laden</button>
-            </div>
+        <div class="field">
+          <label>Accounts <em>mehrere möglich — sie laufen parallel</em></label>
+          <div id="opAccounts" class="picker">
+            <div class="empty">Noch kein Account gebunden.</div>
           </div>
         </div>
-        <p class="field-note">Der Account braucht Admin-Rechte mit „Nutzer einladen“ in dieser Gruppe.</p>
+        <div class="field">
+          <label for="fOpGroup">Gruppe</label>
+          <div class="row">
+            <select id="fOpGroup"><option value="">– Gruppen laden –</option></select>
+            <button class="btn btn-ghost btn-sm" id="btnLoadGroups">Laden</button>
+          </div>
+        </div>
+        <p class="field-note">
+          Jeder gewählte Account braucht Admin-Rechte mit „Nutzer einladen“ in
+          dieser Gruppe. Die Gruppenliste kommt vom ersten gewählten Account.
+        </p>
       </div>
 
       <div class="split split--wide">

@@ -40,6 +40,9 @@ def stats() -> dict[str, Any]:
         "pool": len(pool),
         "pool_valid": sum(1 for p in pool if p["status"] == "valid"),
         "pool_dead": sum(1 for p in pool if p["status"] == "dead"),
+        # Noch keinem Account zugewiesen - das ist es, was ein Start verteilen kann.
+        "pool_free_valid": jobs.available_count(True),
+        "pool_free_open": jobs.available_count(False),
         # In der Gruppe angekommen - direkt aufgenommen oder ueber eine
         # genehmigte Beitrittsanfrage.
         "pool_joined": sum(1 for p in pool if p["status"] in ("added", "joined")),
@@ -256,15 +259,26 @@ async def job_pool_check(payload: schemas.PoolCheckIn) -> dict[str, int]:
 
 
 @router.post("/jobs/add")
-async def job_add(payload: schemas.AddIn) -> dict[str, int]:
+async def job_add(payload: schemas.AddIn) -> dict[str, list[int]]:
+    """Startet je Account einen eigenen Job. Sie laufen parallel und teilen
+    sich den Pool, ohne sich dieselben Namen zu greifen."""
+    for account_id in payload.account_ids:
+        if not db.query_one("SELECT id FROM accounts WHERE id = ?", (account_id,)):
+            raise HTTPException(
+                status_code=404, detail=f"Account {account_id} nicht gefunden."
+            )
+
     return {
-        "job_id": jobs.start_add(
-            payload.account_id,
-            payload.target,
-            delay=payload.delay,
-            limit=payload.limit,
-            only_valid=payload.only_valid,
-        )
+        "job_ids": [
+            jobs.start_add(
+                account_id,
+                payload.target,
+                delay=payload.delay,
+                limit=payload.limit,
+                only_valid=payload.only_valid,
+            )
+            for account_id in payload.account_ids
+        ]
     }
 
 

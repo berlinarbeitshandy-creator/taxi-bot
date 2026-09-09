@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS pool (
     note        TEXT    NOT NULL DEFAULT '',
     status      TEXT    NOT NULL DEFAULT 'new',
     reason      TEXT    NOT NULL DEFAULT '',
+    assigned_to INTEGER,
     tg_user_id  INTEGER,
     display     TEXT,
     is_premium  INTEGER NOT NULL DEFAULT 0,
@@ -90,6 +91,8 @@ def _migrate(cur: sqlite3.Cursor) -> None:
     columns = {row[1] for row in cur.execute("PRAGMA table_info(pool)").fetchall()}
     if "reason" not in columns:
         cur.execute("ALTER TABLE pool ADD COLUMN reason TEXT NOT NULL DEFAULT ''")
+    if "assigned_to" not in columns:
+        cur.execute("ALTER TABLE pool ADD COLUMN assigned_to INTEGER")
 
     columns = {row[1] for row in cur.execute("PRAGMA table_info(accounts)").fetchall()}
     if "adds_used" not in columns:

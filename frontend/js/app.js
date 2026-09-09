@@ -9,6 +9,7 @@ const state = {
   accounts: [],
   pool: [],
   stats: null,
+  opAccounts: [],
   devices: [],
   groups: [],
   jobs: [],
@@ -233,12 +234,15 @@ function fillAccountSelects() {
       ).join("")
     : '<option value="">– kein Account gebunden –</option>';
 
-  ["#fCheckAccount", "#fOpAccount"].forEach((sel) => {
-    const el = $(sel);
-    const previous = el.value;
-    el.innerHTML = options;
-    if (previous) el.value = previous;
-  });
+  const el = $("#fCheckAccount");
+  const previous = el.value;
+  el.innerHTML = options;
+  if (previous) el.value = previous;
+
+  // Abgemeldete Accounts nicht in der Auswahl stehen lassen.
+  const alive = new Set(state.accounts.map((a) => a.id));
+  state.opAccounts = state.opAccounts.filter((id) => alive.has(id));
+  renderOpAccounts();
 }
 
 $("#accountList").addEventListener("click", async (e) => {
@@ -443,6 +447,13 @@ const POOL_BADGE = {
   joined: ["badge-accent", "beigetreten"],
 };
 
+function assignedLabel(entry) {
+  if (!entry.assigned_to) return "";
+  const a = state.accounts.find((x) => x.id === entry.assigned_to);
+  const name = a ? a.label || a.first_name || a.phone : `Account ${entry.assigned_to}`;
+  return `${entry.status === "valid" ? "reserviert für" : "über"} ${esc(name)}`;
+}
+
 function renderPool() {
   const body = $("#poolTable tbody");
   if (!state.pool.length) {
@@ -459,6 +470,7 @@ function renderPool() {
         <td>
           <span class="badge ${cls}">${esc(text)}</span>
           ${p.reason ? `<span class="cell-reason">${esc(p.reason)}</span>` : ""}
+          ${assignedLabel(p) ? `<span class="cell-reason">${assignedLabel(p)}</span>` : ""}
         </td>
         <td class="cell-dim">${esc(p.note || "–")}</td>
         <td>
@@ -574,8 +586,8 @@ $("#btnPoolCheck").addEventListener("click", async () => {
 /* ── Vorgang ─────────────────────────────────────────────── */
 
 $("#btnLoadGroups").addEventListener("click", async () => {
-  const accountId = Number($("#fOpAccount").value);
-  if (!accountId) return toast("Zuerst einen Account binden.", "error");
+  const accountId = primaryOpAccount()?.id;
+  if (!accountId) return toast("Zuerst einen Account wählen.", "error");
 
   const btn = $("#btnLoadGroups");
   btn.disabled = true;
@@ -598,86 +610,135 @@ $("#btnLoadGroups").addEventListener("click", async () => {
 });
 
 function addCandidateCount() {
-  // Aus der Gesamtstatistik, nicht aus der gefilterten Tabellenansicht.
+  // Nur was keinem Account zugewiesen ist, und aus der Gesamtstatistik
+  // statt aus der gefilterten Tabellenansicht.
   const s = state.stats;
   if (!s) return 0;
-  if ($("#fOnlyValid").checked) return s.pool_valid;
-  return Math.max(0, s.pool - s.pool_dead - s.pool_joined);
+  return $("#fOnlyValid").checked ? s.pool_free_valid : s.pool_free_open;
 }
 
-function selectedOpAccount() {
-  const id = Number($("#fOpAccount").value);
-  return state.accounts.find((a) => a.id === id) || null;
+function renderOpAccounts() {
+  const box = $("#opAccounts");
+  if (!state.accounts.length) {
+    box.innerHTML = '<div class="empty">Noch kein Account gebunden.</div>';
+    return;
+  }
+
+  const chosen = new Set(state.opAccounts);
+  box.innerHTML = state.accounts.map((a) => {
+    const q = a.quota;
+    const info = q.blocked
+      ? `<span class="pick-warn" data-until="${q.cooldown_until}">frei in ${
+          esc(countdown(q.seconds_left))}</span>`
+      : `<span class="pick-dim">${q.remaining} frei</span>`;
+    return `
+      <label class="pick${q.blocked ? " is-blocked" : ""}">
+        <input type="checkbox" value="${a.id}"${
+          chosen.has(a.id) ? " checked" : ""}${q.blocked ? " disabled" : ""}>
+        <span class="pick-name">${esc(a.label || a.first_name || a.phone)}${
+          a.is_premium ? " ★" : ""}</span>
+        ${info}
+      </label>`;
+  }).join("");
+}
+
+$("#opAccounts").addEventListener("change", () => {
+  state.opAccounts = $$("#opAccounts input:checked").map((i) => Number(i.value));
+  renderAddEstimate();
+});
+
+function selectedOpAccounts() {
+  return state.accounts.filter(
+    (a) => state.opAccounts.includes(a.id) && !a.quota.blocked
+  );
+}
+
+/** Für alles, was nur einen Account braucht: Gruppen laden, Link, Anfragen.
+ *  Das Kontingent spielt hier keine Rolle, es wird nichts aufgenommen. */
+function primaryOpAccount() {
+  return state.accounts.find((a) => a.id === state.opAccounts[0]) || null;
+}
+
+/** Verteilt den freien Pool der Reihe nach auf die gewählten Accounts. */
+function planRun() {
+  const delay = Number($("#fAddDelay").value);
+  const limit = Number($("#fAddLimit").value);
+  const accounts = selectedOpAccounts();
+
+  let pool = addCandidateCount();
+  const shares = accounts.map((a) => {
+    const share = Math.min(limit || pool, a.quota.remaining, pool);
+    pool -= share;
+    return { account: a, count: share };
+  });
+
+  const total = shares.reduce((sum, s) => sum + s.count, 0);
+  // Parallel: es dauert so lange wie der längste Anteil, nicht die Summe.
+  const longest = shares.reduce((max, s) => Math.max(max, s.count), 0);
+  const minutes = Math.round(((longest - 1) * delay) / 60);
+  return { shares, total, minutes, available: addCandidateCount() };
 }
 
 function renderAddEstimate() {
   const box = $("#addEstimate");
-  const account = selectedOpAccount();
+  const accounts = selectedOpAccounts();
 
-  if (account?.quota.blocked) {
-    box.textContent =
-      `Kontingent aufgebraucht (${account.quota.used}/${account.quota.limit})` +
-      ` — frei in ${countdown(account.quota.seconds_left)}, oder unter „Accounts“ freigeben.`;
+  if (!accounts.length) {
+    const blocked = state.accounts.filter((a) => a.quota.blocked).length;
+    box.textContent = state.opAccounts.length && blocked
+      ? "Gewählte Accounts pausieren — abwarten oder freigeben."
+      : "Account wählen.";
     return;
   }
 
-  const delay = Number($("#fAddDelay").value);
-  const limit = Number($("#fAddLimit").value);
-  const available = addCandidateCount();
-  // Der Account bremst genauso wie der Pool.
-  const room = account ? account.quota.remaining : available;
-  const count = Math.min(limit || available, available, room);
+  const { shares, total, minutes, available } = planRun();
 
-  if (!count) {
-    box.textContent = !available
-      ? ($("#fOnlyValid").checked
-          ? "Keine geprüften Einträge — erst den Pool prüfen."
-          : "Keine offenen Einträge im Pool.")
-      : "Kontingent des Accounts ist aufgebraucht.";
+  if (!total) {
+    box.textContent = $("#fOnlyValid").checked
+      ? "Keine freien geprüften Einträge — erst den Pool prüfen."
+      : "Keine freien Einträge im Pool.";
     return;
   }
 
-  const minutes = Math.round(((count - 1) * delay) / 60);
   const duration = minutes < 1 ? "unter einer Minute" : `rund ${minutes} Minuten`;
-  const quotaNote = account
-    ? ` · Kontingent danach ${account.quota.used + count}/${account.quota.limit}`
+  const split = shares.length > 1
+    ? " — " + shares
+        .map((s) => `${esc(s.account.label || s.account.phone)}: ${s.count}`)
+        .join(", ")
     : "";
   box.textContent =
-    `${count} von ${available} Einträgen · Dauer ${duration}${quotaNote}.`;
+    `${total} von ${available} freien Einträgen · Dauer ${duration}${split}.`;
 }
 
-["#fAddDelay", "#fAddLimit", "#fOnlyValid", "#fOpAccount"].forEach((sel) =>
+["#fAddDelay", "#fAddLimit", "#fOnlyValid"].forEach((sel) =>
   $(sel).addEventListener("change", renderAddEstimate)
 );
 
 $("#btnStartAdd").addEventListener("click", async () => {
-  const accountId = Number($("#fOpAccount").value);
   const target = $("#fOpGroup").value;
-  if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
-  if (!addCandidateCount()) return toast("Keine passenden Pool-Einträge.", "error");
-
-  const account = selectedOpAccount();
-  if (account?.quota.blocked) {
-    // countdown() endet bereits mit einem Abkürzungspunkt.
-    return toast(
-      `Kontingent aufgebraucht — frei in ${countdown(account.quota.seconds_left)}`,
-      "error"
-    );
-  }
+  const accounts = selectedOpAccounts();
+  if (!accounts.length) return toast("Mindestens einen Account wählen.", "error");
+  if (!target) return toast("Gruppe wählen.", "error");
+  if (!addCandidateCount()) return toast("Keine freien Pool-Einträge.", "error");
 
   try {
     const res = await api("/jobs/add", {
       method: "POST",
       body: {
-        account_id: accountId,
+        account_ids: accounts.map((a) => a.id),
         target,
         delay: Number($("#fAddDelay").value),
         limit: Number($("#fAddLimit").value),
         only_valid: $("#fOnlyValid").checked,
       },
     });
-    state.activeJob = res.job_id;
-    toast("Vorgang gestartet.", "ok");
+    state.activeJob = res.job_ids[0];
+    toast(
+      res.job_ids.length > 1
+        ? `${res.job_ids.length} Vorgänge gestartet — sie laufen parallel.`
+        : "Vorgang gestartet.",
+      "ok"
+    );
     showView("jobs");
   } catch (err) {
     toast(err.message, "error");
@@ -685,7 +746,7 @@ $("#btnStartAdd").addEventListener("click", async () => {
 });
 
 $("#btnInvite").addEventListener("click", async () => {
-  const accountId = Number($("#fOpAccount").value);
+  const accountId = primaryOpAccount()?.id;
   const target = $("#fOpGroup").value;
   if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
 
@@ -721,7 +782,7 @@ $("#btnCopyLink").addEventListener("click", async () => {
 });
 
 $("#btnLoadRequests").addEventListener("click", async () => {
-  const accountId = Number($("#fOpAccount").value);
+  const accountId = primaryOpAccount()?.id;
   const target = $("#fOpGroup").value;
   if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
 
@@ -752,7 +813,7 @@ $("#btnLoadRequests").addEventListener("click", async () => {
 });
 
 $("#btnStartOp").addEventListener("click", async () => {
-  const accountId = Number($("#fOpAccount").value);
+  const accountId = primaryOpAccount()?.id;
   const target = $("#fOpGroup").value;
   if (!accountId || !target) return toast("Account und Gruppe wählen.", "error");
 
@@ -789,6 +850,11 @@ const JOB_BADGE = {
   interrupted: ["badge-warn", "unterbrochen"],
 };
 
+function jobAccount(job) {
+  const a = state.accounts.find((x) => x.id === job.account_id);
+  return a ? esc(a.label || a.first_name || a.phone) : "";
+}
+
 function jobSummary(job) {
   const s = job.stats || {};
   if (job.kind === "pool_check") {
@@ -812,7 +878,8 @@ function renderJobs() {
     return `
       <div class="mini${j.id === state.activeJob ? " is-active" : ""}" data-job="${j.id}">
         <div>
-          <div class="mini-title">${esc(JOB_LABEL[j.kind] || j.kind)}</div>
+          <div class="mini-title">${esc(JOB_LABEL[j.kind] || j.kind)}${
+            jobAccount(j) ? ` · ${jobAccount(j)}` : ""}</div>
           <div class="mini-sub">${esc(jobSummary(j))} · ${esc(timeAgo(j.created_at))}</div>
         </div>
         <span class="badge ${cls}">${esc(text)}</span>

@@ -306,17 +306,94 @@ def start_add(
     return job_id
 
 
-def _add_candidates(only_valid: bool, limit: int) -> list[dict[str, Any]]:
+def _status_filter(only_valid: bool) -> str:
     if only_valid:
-        sql = "SELECT * FROM pool WHERE status = 'valid' ORDER BY id"
+        return "status = 'valid'"
+    # Tote und bereits aufgenommene Eintraege kosten sonst nur Versuche.
+    return "status NOT IN ('added', 'dead')"
+
+
+def available_count(only_valid: bool) -> int:
+    """Wie viele Eintraege gerade niemandem zugewiesen sind."""
+    row = db.query_one(
+        f"SELECT COUNT(*) AS c FROM pool"
+        f" WHERE {_status_filter(only_valid)} AND assigned_to IS NULL"
+    )
+    return row["c"] if row else 0
+
+
+def claim_candidates(
+    account_id: int, only_valid: bool, limit: int
+) -> list[dict[str, Any]]:
+    """Weist dem Account bis zu `limit` freie Eintraege fest zu.
+
+    Die Zuweisung passiert in einer Transaktion, damit zwei gleichzeitig
+    laufende Accounts nie dieselben Namen greifen. Eintraege aus einem
+    abgebrochenen Lauf desselben Accounts werden zuerst wieder aufgenommen.
+    """
+    condition = _status_filter(only_valid)
+    with db.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM pool WHERE {condition} AND assigned_to = ? ORDER BY id",
+            (account_id,),
+        )
+        mine = [dict(row) for row in cur.fetchall()]
+
+        room = max(0, limit - len(mine)) if limit else 0
+        fresh: list[dict[str, Any]] = []
+        if not limit or room:
+            sql = (
+                f"SELECT * FROM pool WHERE {condition} AND assigned_to IS NULL"
+                " ORDER BY id"
+            )
+            if limit:
+                sql += " LIMIT ?"
+                cur.execute(sql, (room,))
+            else:
+                cur.execute(sql)
+            fresh = [dict(row) for row in cur.fetchall()]
+
+            if fresh:
+                marks = ",".join("?" for _ in fresh)
+                cur.execute(
+                    f"UPDATE pool SET assigned_to = ? WHERE id IN ({marks})",
+                    (account_id, *[e["id"] for e in fresh]),
+                )
+
+    return (mine + fresh)[:limit] if limit else mine + fresh
+
+
+def release_claims(account_id: int | None = None) -> None:
+    """Gibt noch unbearbeitete Zuweisungen wieder frei."""
+    if account_id is None:
+        db.execute(
+            "UPDATE pool SET assigned_to = NULL"
+            " WHERE assigned_to IS NOT NULL AND status NOT IN ('added', 'dead')"
+        )
     else:
-        # Tote und bereits aufgenommene Eintraege kosten sonst nur Versuche.
-        sql = "SELECT * FROM pool WHERE status NOT IN ('added', 'dead') ORDER BY id"
-    entries = db.query(sql)
-    return entries[:limit] if limit else entries
+        db.execute(
+            "UPDATE pool SET assigned_to = NULL"
+            " WHERE assigned_to = ? AND status NOT IN ('added', 'dead')",
+            (account_id,),
+        )
 
 
 async def _run_add(
+    job_id: int,
+    account_id: int,
+    target: str,
+    delay: float,
+    limit: int,
+    only_valid: bool,
+) -> None:
+    try:
+        await _add_loop(job_id, account_id, target, delay, limit, only_valid)
+    finally:
+        # Was dieser Lauf nicht geschafft hat, gehoert wieder allen.
+        release_claims(account_id)
+
+
+async def _add_loop(
     job_id: int,
     account_id: int,
     target: str,
@@ -337,7 +414,7 @@ async def _run_add(
 
     # Nie mehr einplanen, als der Account noch darf.
     room = allowance["remaining"]
-    entries = _add_candidates(only_valid, min(limit, room) if limit else room)
+    entries = claim_candidates(account_id, only_valid, min(limit, room) if limit else room)
 
     stats = {
         "total": len(entries),

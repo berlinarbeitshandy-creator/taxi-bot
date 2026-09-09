@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import db
+from . import db, jobs
 from .api import router
 from .config import FRONTEND_DIR, PANEL_PASSWORD, PANEL_USER
 
@@ -21,6 +21,8 @@ async def lifespan(_app: FastAPI):
         "UPDATE jobs SET status = 'interrupted', finished_at = ? WHERE status = 'running'",
         (db.now(),),
     )
+    # Zuweisungen aus abgebrochenen Laeufen wieder freigeben.
+    jobs.release_claims()
     yield
 
 
