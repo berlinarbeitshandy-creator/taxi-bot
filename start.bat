@@ -21,12 +21,20 @@ if not exist ".venv" (
 
 call ".venv\Scripts\activate.bat"
 
+REM Neu installieren, wenn Pakete fehlen ODER sich die Liste seit dem letzten
+REM Mal geaendert hat - sonst faehrt ein Update mit alten Paketen los.
+set NEUINSTALL=0
 python -c "import fastapi, telethon" >nul 2>nul
-if errorlevel 1 (
+if errorlevel 1 set NEUINSTALL=1
+fc /b requirements.txt ".venv\.requirements-stand" >nul 2>nul
+if errorlevel 1 set NEUINSTALL=1
+
+if "%NEUINSTALL%"=="1" (
   echo   Lade die benoetigten Pakete...
   python -m pip install --quiet --upgrade pip
   python -m pip install --quiet -r requirements.txt
   if errorlevel 1 goto fehler
+  copy /y requirements.txt ".venv\.requirements-stand" >nul
 )
 
 if not exist ".env" copy ".env.example" ".env" >nul

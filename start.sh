@@ -20,10 +20,14 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-if ! python -c "import fastapi, telethon" >/dev/null 2>&1; then
+# Neu installieren, wenn Pakete fehlen ODER sich die Liste seit dem letzten
+# Mal geaendert hat - sonst faehrt ein Update mit alten Paketen los.
+if ! python -c "import fastapi, telethon" >/dev/null 2>&1 \
+   || ! cmp -s requirements.txt .venv/.requirements-stand; then
   echo "  Lade die benoetigten Pakete..."
   python -m pip install --quiet --upgrade pip
   python -m pip install --quiet -r requirements.txt
+  cp requirements.txt .venv/.requirements-stand
 fi
 
 [ -f .env ] || cp .env.example .env
