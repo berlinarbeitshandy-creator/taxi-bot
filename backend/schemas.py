@@ -65,6 +65,9 @@ class PoolCheckIn(BaseModel):
 class AddIn(BaseModel):
     account_ids: list[int] = Field(min_length=1, description="Ein Job je Account")
     target: str
+    # Nacheinander ist die sicherere Vorgabe: der erste Account zeigt, ob
+    # Telegram bremst, bevor die naechsten losgeschickt werden.
+    sequential: bool = True
     delay: float = Field(default=45, ge=3, le=600)
     limit: int = Field(default=0, ge=0)
     only_valid: bool = True

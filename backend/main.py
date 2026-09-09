@@ -18,7 +18,8 @@ async def lifespan(_app: FastAPI):
     db.init()
     # Jobs, die beim letzten Stopp noch liefen, sind nicht mehr aktiv.
     db.execute(
-        "UPDATE jobs SET status = 'interrupted', finished_at = ? WHERE status = 'running'",
+        "UPDATE jobs SET status = 'interrupted', finished_at = ?"
+        " WHERE status IN ('running', 'queued')",
         (db.now(),),
     )
     # Zuweisungen aus abgebrochenen Laeufen freigeben - pausierte Vorgaenge

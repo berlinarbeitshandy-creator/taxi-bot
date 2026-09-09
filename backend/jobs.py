@@ -12,6 +12,8 @@ from . import db, quota, telegram_manager as tg
 from .config import ADD_DELAY, API_DELAY
 
 _tasks: dict[int, asyncio.Task] = {}
+# Ketten laufen neben den Einzeljobs und werden ueber ihren ersten Job gefuehrt.
+_sequences: dict[int, asyncio.Task] = {}
 
 
 # --------------------------------------------------------------------------
@@ -23,6 +25,7 @@ def create_job(
     account_id: int | None,
     target: str,
     params: dict[str, Any] | None = None,
+    status: str = "running",
 ) -> int:
     return db.execute(
         "INSERT INTO jobs (kind, account_id, target, status, params, stats, log,"
@@ -31,7 +34,7 @@ def create_job(
             kind,
             account_id,
             target,
-            "running",
+            status,
             db.dumps(params or {}),
             "{}",
             "[]",
@@ -346,6 +349,84 @@ def start_add(
     )
     _spawn(job_id, _run_add(job_id, account_id, target, delay, limit, only_valid))
     return job_id
+
+
+def start_add_sequence(
+    account_ids: list[int],
+    target: str,
+    *,
+    delay: float = ADD_DELAY,
+    limit: int = 0,
+    only_valid: bool = True,
+) -> list[int]:
+    """Laesst die Accounts nacheinander laufen statt gleichzeitig.
+
+    Der erste Account ist damit der Kanarienvogel: haelt er wegen PeerFlood
+    an, wird die Kette gestoppt und die uebrigen Accounts bleiben aussen vor.
+    """
+    params = {"delay": delay, "limit": limit, "only_valid": only_valid}
+    job_ids = [
+        create_job("add", account_id, target, params, status="queued")
+        for account_id in account_ids
+    ]
+    for job_id in job_ids[1:]:
+        _append_log(job_id, "info", "Wartet, bis der Account davor fertig ist.")
+
+    task = asyncio.create_task(
+        _run_sequence(job_ids, account_ids, target, delay, limit, only_valid)
+    )
+    _sequences[job_ids[0]] = task
+    task.add_done_callback(lambda _t: _sequences.pop(job_ids[0], None))
+    return job_ids
+
+
+async def _run_sequence(
+    job_ids: list[int],
+    account_ids: list[int],
+    target: str,
+    delay: float,
+    limit: int,
+    only_valid: bool,
+) -> None:
+    for position, (job_id, account_id) in enumerate(zip(job_ids, account_ids)):
+        db.execute("UPDATE jobs SET status = 'running' WHERE id = ?", (job_id,))
+        task = asyncio.create_task(
+            _run_add(job_id, account_id, target, delay, limit, only_valid)
+        )
+        _tasks[job_id] = task
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _tasks.pop(job_id, None)
+
+        row = db.query_one("SELECT status FROM jobs WHERE id = ?", (job_id,))
+        status = row["status"] if row else "error"
+        if status == "done":
+            continue
+
+        # Anhalten. Was den ersten Account gebremst hat, bremst die naechsten
+        # genauso - sie jetzt loszuschicken wuerde nur mehr Accounts kosten.
+        for rest in job_ids[position + 1:]:
+            _append_log(
+                rest,
+                "warn",
+                "Nicht gestartet: der Account davor wurde angehalten "
+                f"({_STATUS_TEXT.get(status, status)}). Erst klären, dann neu starten.",
+            )
+            db.execute(
+                "UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
+                (db.now(), rest),
+            )
+        return
+
+
+_STATUS_TEXT = {
+    "paused": "PeerFlood-Pause",
+    "error": "Fehler",
+    "cancelled": "abgebrochen",
+}
 
 
 def resume_job(job_id: int) -> None:

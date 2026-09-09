@@ -34,13 +34,29 @@ Einladungen in eine Zielgruppe zu holen.
 - Pausiert bei PeerFlood, statt den Account weiter zu verbrennen — und
   wartet auf dein **Go**, bevor es weitergeht
 
-**Mehrere Accounts gleichzeitig**
-- Im Vorgang mehrere Accounts ankreuzen — jeder bekommt einen eigenen Job,
-  alle laufen parallel
+**Mehrere Accounts**
+- Im Vorgang mehrere Accounts ankreuzen — jeder bekommt einen eigenen Job
 - Der Pool wird fest aufgeteilt: jeder Account bekommt seinen eigenen Block
   zugewiesen, zwei greifen nie nach demselben Namen
-- Die Aufteilung steht in der Vorschau, bevor du startest
-- Zwei Accounts sind also doppelt so schnell durch, nicht doppelt so lang
+- **Nacheinander** (Vorgabe) oder **gleichzeitig** — siehe unten
+- Die Aufteilung und die Dauer stehen in der Vorschau, bevor du startest
+
+### Nacheinander oder gleichzeitig?
+
+**Nacheinander** ist die Vorgabe, und in den meisten Fällen die bessere Wahl:
+
+- Telegram korreliert über die IP. Zwei Accounts, die aus derselben Leitung
+  gleichzeitig dieselbe Gruppe befüllen, sind ein auffälliges Muster — es sei
+  denn, jeder Account hat seinen eigenen Proxy.
+- Auch die Gruppe selbst hat ein Tempo-Limit, nicht nur die Accounts.
+  Gleichzeitig verdoppelt die Beitritte pro Minute in dieselbe Gruppe.
+- Der erste Account ist der Kanarienvogel: hält er wegen PeerFlood an, wird
+  die Kette gestoppt und die übrigen Accounts bleiben außen vor, statt in
+  dieselbe Sperre zu laufen.
+
+**Gleichzeitig** ist doppelt so schnell und vertretbar, wenn jeder Account
+über einen eigenen Proxy läuft. Der Preis: eine Sperre erwischt beide, bevor
+du davon erfährst.
 
 **Kontingent je Account**
 - Jeder Account darf 40 Aufnahme-Versuche machen, dann pausiert er

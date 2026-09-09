@@ -336,6 +336,17 @@
               </select>
             </div>
           </div>
+          <div class="field" id="fOrderField" hidden>
+            <label for="fOrder">Bei mehreren Accounts</label>
+            <select id="fOrder">
+              <option value="sequential" selected>nacheinander — empfohlen</option>
+              <option value="parallel">gleichzeitig — schneller, auffälliger</option>
+            </select>
+            <p class="field-note">
+              Nacheinander zeigt der erste Account, ob Telegram bremst. Hält er
+              wegen PeerFlood an, bleiben die übrigen außen vor.
+            </p>
+          </div>
           <label class="check"><input type="checkbox" id="fOnlyValid" checked> nur geprüfte Pool-Einträge</label>
           <button class="btn btn-primary btn-block" id="btnStartAdd">Vorgang starten</button>
           <p class="field-note" id="addEstimate">–</p>

@@ -268,8 +268,16 @@ async def job_add(payload: schemas.AddIn) -> dict[str, list[int]]:
                 status_code=404, detail=f"Account {account_id} nicht gefunden."
             )
 
-    return {
-        "job_ids": [
+    if payload.sequential:
+        job_ids = jobs.start_add_sequence(
+            payload.account_ids,
+            payload.target,
+            delay=payload.delay,
+            limit=payload.limit,
+            only_valid=payload.only_valid,
+        )
+    else:
+        job_ids = [
             jobs.start_add(
                 account_id,
                 payload.target,
@@ -279,7 +287,7 @@ async def job_add(payload: schemas.AddIn) -> dict[str, list[int]]:
             )
             for account_id in payload.account_ids
         ]
-    }
+    return {"job_ids": job_ids}
 
 
 @router.post("/jobs/approve")

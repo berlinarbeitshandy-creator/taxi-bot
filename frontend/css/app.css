@@ -242,6 +242,7 @@ a { color: var(--accent); }
 .card--lead { margin-bottom: 18px; }
 .card--form > .btn-block + .field-note { margin-top: 10px; text-align: center; }
 .card--form > .field,
+.card--form > .grid-2,
 .card--form > .check,
 .card--form > .field-note { margin-bottom: 13px; }
 .card--form > .field-note + .field { margin-top: -4px; }

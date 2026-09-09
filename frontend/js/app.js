@@ -673,10 +673,13 @@ function planRun() {
   });
 
   const total = shares.reduce((sum, s) => sum + s.count, 0);
-  // Parallel: es dauert so lange wie der längste Anteil, nicht die Summe.
-  const longest = shares.reduce((max, s) => Math.max(max, s.count), 0);
-  const minutes = Math.round(((longest - 1) * delay) / 60);
-  return { shares, total, minutes, available: addCandidateCount() };
+  const sequential = $("#fOrder").value === "sequential";
+  // Nacheinander addieren sich die Läufe, gleichzeitig zählt der längste.
+  const steps = sequential
+    ? shares.reduce((sum, s) => sum + Math.max(0, s.count - 1), 0)
+    : shares.reduce((max, s) => Math.max(max, s.count - 1), 0);
+  const minutes = Math.round((steps * delay) / 60);
+  return { shares, total, minutes, sequential, available: addCandidateCount() };
 }
 
 function renderAddEstimate() {
@@ -691,7 +694,10 @@ function renderAddEstimate() {
     return;
   }
 
-  const { shares, total, minutes, available } = planRun();
+  // Die Reihenfolge ist nur bei mehreren Accounts eine Frage.
+  $("#fOrderField").hidden = accounts.length < 2;
+
+  const { shares, total, minutes, sequential, available } = planRun();
 
   if (!total) {
     box.textContent = $("#fOnlyValid").checked
@@ -702,7 +708,7 @@ function renderAddEstimate() {
 
   const duration = minutes < 1 ? "unter einer Minute" : `rund ${minutes} Minuten`;
   const split = shares.length > 1
-    ? " — " + shares
+    ? ` ${sequential ? "nacheinander" : "gleichzeitig"} — ` + shares
         .map((s) => `${esc(s.account.label || s.account.phone)}: ${s.count}`)
         .join(", ")
     : "";
@@ -710,7 +716,7 @@ function renderAddEstimate() {
     `${total} von ${available} freien Einträgen · Dauer ${duration}${split}.`;
 }
 
-["#fAddDelay", "#fAddLimit", "#fOnlyValid"].forEach((sel) =>
+["#fAddDelay", "#fAddLimit", "#fOnlyValid", "#fOrder"].forEach((sel) =>
   $(sel).addEventListener("change", renderAddEstimate)
 );
 
@@ -730,12 +736,16 @@ $("#btnStartAdd").addEventListener("click", async () => {
         delay: Number($("#fAddDelay").value),
         limit: Number($("#fAddLimit").value),
         only_valid: $("#fOnlyValid").checked,
+        sequential: $("#fOrder").value === "sequential",
       },
     });
     state.activeJob = res.job_ids[0];
     toast(
       res.job_ids.length > 1
-        ? `${res.job_ids.length} Vorgänge gestartet — sie laufen parallel.`
+        ? `${res.job_ids.length} Vorgänge — ${
+            $("#fOrder").value === "sequential"
+              ? "sie laufen nacheinander"
+              : "sie laufen gleichzeitig"}.`
         : "Vorgang gestartet.",
       "ok"
     );
@@ -843,6 +853,7 @@ const JOB_LABEL = {
   approve: "Anfragen genehmigen",
 };
 const JOB_BADGE = {
+  queued:      ["badge-muted", "wartet"],
   running:     ["badge-accent", "läuft"],
   paused:      ["badge-warn", "pausiert"],
   done:        ["badge-ok", "fertig"],
