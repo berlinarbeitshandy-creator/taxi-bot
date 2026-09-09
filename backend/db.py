@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     last_error    TEXT,
     last_check    REAL,
     adds_used     INTEGER NOT NULL DEFAULT 0,
+    adds_total    INTEGER NOT NULL DEFAULT 0,
+    quota_limit   INTEGER NOT NULL DEFAULT 40,
     cooldown_until REAL,
     created_at    REAL    NOT NULL
 );
@@ -102,6 +104,19 @@ def _migrate(cur: sqlite3.Cursor) -> None:
         )
     if "cooldown_until" not in columns:
         cur.execute("ALTER TABLE accounts ADD COLUMN cooldown_until REAL")
+    if "adds_total" not in columns:
+        cur.execute(
+            "ALTER TABLE accounts ADD COLUMN adds_total INTEGER NOT NULL DEFAULT 0"
+        )
+        # Was der Account bisher geschafft hat, zaehlt als Vorleistung.
+        cur.execute("UPDATE accounts SET adds_total = adds_used")
+    if "quota_limit" not in columns:
+        from .config import ADD_QUOTA
+
+        cur.execute(
+            "ALTER TABLE accounts ADD COLUMN quota_limit INTEGER NOT NULL DEFAULT 40"
+        )
+        cur.execute("UPDATE accounts SET quota_limit = ?", (ADD_QUOTA,))
 
     columns = {row[1] for row in cur.execute("PRAGMA table_info(jobs)").fetchall()}
     if "params" not in columns:

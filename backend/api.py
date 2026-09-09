@@ -148,6 +148,14 @@ async def delete_account(account_id: int, logout: bool = True) -> dict[str, bool
     return {"ok": True}
 
 
+@router.patch("/accounts/{account_id}/quota")
+def set_quota(account_id: int, payload: schemas.QuotaIn) -> dict[str, Any]:
+    """Setzt das Kontingent dieses Accounts (der Regler)."""
+    if not db.query_one("SELECT id FROM accounts WHERE id = ?", (account_id,)):
+        raise HTTPException(status_code=404, detail="Account nicht gefunden.")
+    return quota.set_limit(account_id, payload.limit)
+
+
 @router.post("/accounts/{account_id}/release")
 def release_quota(account_id: int) -> dict[str, Any]:
     """Hebt die Aufnahme-Pause sofort auf und setzt den Zähler zurück."""

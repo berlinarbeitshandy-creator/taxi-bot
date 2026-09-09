@@ -11,7 +11,7 @@ from telethon import TelegramClient, errors, functions, types
 from telethon.sessions import StringSession
 
 from . import db
-from .config import API_DELAY, CONNECT_TIMEOUT
+from .config import API_DELAY, CONNECT_TIMEOUT, WARMUP_QUOTA
 from .crypto import decrypt, encrypt
 from .devices import get_device
 
@@ -224,8 +224,9 @@ async def _finish_login(login_id: str) -> dict[str, Any]:
         """
         INSERT INTO accounts
             (label, phone, api_id, api_hash_enc, session_enc, proxy, device_id,
-             status, tg_user_id, username, first_name, is_premium, last_check, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             status, tg_user_id, username, first_name, is_premium, quota_limit,
+             last_check, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             pending.label or (me.first_name or pending.phone),
@@ -240,6 +241,8 @@ async def _finish_login(login_id: str) -> dict[str, Any]:
             me.username,
             me.first_name,
             1 if getattr(me, "premium", False) else 0,
+            # Frisch gebunden - erst warmlaufen lassen, spaeter hochdrehen.
+            WARMUP_QUOTA,
             db.now(),
             db.now(),
         ),

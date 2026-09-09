@@ -58,8 +58,24 @@ Einladungen in eine Zielgruppe zu holen.
 über einen eigenen Proxy läuft. Der Preis: eine Sperre erwischt beide, bevor
 du davon erfährst.
 
-**Kontingent je Account**
-- Jeder Account darf 40 Aufnahme-Versuche machen, dann pausiert er
+**Kontingent je Account — mit Aufwärmen**
+- Jeder Account hat seinen eigenen Regler (5–100). 40 ist die Faustregel für
+  einen eingelaufenen Account, nicht mehr ein fester Wert
+- **Frisch gebundene Accounts starten bei 10.** Ein neuer Account fällt
+  Telegram schneller auf als einer, der seit Wochen unauffällig läuft
+- Das Panel zählt mit, wie viel ein Account insgesamt geschafft hat, und
+  empfiehlt daraufhin den nächsten Schritt — mit einem Knopf zum Übernehmen:
+
+  | bisher aufgenommen | Empfehlung |
+  | --- | --- |
+  | unter 30 | 10 — erst warmlaufen lassen |
+  | ab 30 | 20 — läuft an |
+  | ab 100 | 30 — gut eingelaufen |
+  | ab 250 | 40 — die Faustregel passt |
+
+- Wer den Regler während einer Pause hochzieht, hat sofort wieder Luft
+- Jeder Account darf so viele Aufnahme-Versuche machen, wie sein Regler sagt,
+  dann pausiert er
 - Die Pause endet nach 10 Stunden von selbst — oder sofort, wenn du den
   Account unter *Accounts* freigibst
 - Der Stand steht am Account, bei laufender Pause mit Countdown
@@ -112,8 +128,9 @@ Bei *Privatsphäre-Einstellung* lohnt ein zweiter Blick: das ist am Account
 selbst kontrollierst. Grenzen setzt Telegram, nicht das Panel:
 
 - Das Aufnehmen ist deutlich strenger begrenzt als Lesezugriffe. Bewährt sind
-  45 Sekunden oder mehr Pause. Nach 40 Versuchen pausiert der Account
-  automatisch für 10 Stunden — beide Werte sind in der `.env` einstellbar.
+  45 Sekunden oder mehr Pause. Ist das Kontingent des Accounts erreicht,
+  pausiert er 10 Stunden — das Kontingent stellst du je Account am Regler ein,
+  frisch gebundene starten bei 10.
 - Gezählt wird **jeder** Versuch, der Telegram erreicht hat, auch ein
   abgelehnter: Telegram zählt Anfragen, nicht Erfolge, und gerade die
   abgelehnten lösen die Sperre aus.
@@ -172,7 +189,9 @@ Alles über `.env` (siehe `.env.example`):
 | `PANEL_HOST` / `PANEL_PORT` | Bind-Adresse | `127.0.0.1:8000` |
 | `PANEL_API_DELAY` | Pause zwischen einzelnen Telegram-Aufrufen in Sekunden | `1.5` |
 | `PANEL_ADD_DELAY` | Vorgabe für die Pause zwischen zwei Aufnahmen | `45` |
-| `PANEL_ADD_QUOTA` | Aufnahme-Versuche je Account, dann pausiert er | `40` |
+| `PANEL_ADD_QUOTA` | Faustregel für einen eingelaufenen Account | `40` |
+| `PANEL_WARMUP_QUOTA` | Womit ein frisch gebundener Account startet | `10` |
+| `PANEL_QUOTA_MIN` / `PANEL_QUOTA_MAX` | Grenzen des Reglers | `5` / `100` |
 | `PANEL_COOLDOWN_HOURS` | Dauer der Pause, wenn nicht von Hand freigegeben | `10` |
 | `PANEL_CONNECT_TIMEOUT` | Abbruch, wenn Telegram nicht erreichbar ist | `25` |
 

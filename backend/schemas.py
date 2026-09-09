@@ -62,6 +62,10 @@ class PoolCheckIn(BaseModel):
     only_new: bool = True
 
 
+class QuotaIn(BaseModel):
+    limit: int = Field(ge=1, le=1000)
+
+
 class AddIn(BaseModel):
     account_ids: list[int] = Field(min_length=1, description="Ein Job je Account")
     target: str

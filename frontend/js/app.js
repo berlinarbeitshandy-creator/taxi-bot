@@ -146,25 +146,42 @@ function renderQuota(account) {
   const bar = `<div class="quota-bar"><i class="${
     q.blocked ? "is-full" : ""}" style="width:${percent}%"></i></div>`;
 
-  if (q.blocked) {
-    return `
-      <div class="quota quota--blocked">
-        <div class="quota-head">
-          <span>Kontingent aufgebraucht — ${q.used}/${q.limit}</span>
-          <strong data-until="${q.cooldown_until}">frei in ${esc(
-            countdown(q.seconds_left))}</strong>
-        </div>
-        ${bar}
-      </div>`;
-  }
+  const head = q.blocked
+    ? `<div class="quota-head">
+         <span>Kontingent aufgebraucht — ${q.used}/${q.limit}</span>
+         <strong data-until="${q.cooldown_until}">frei in ${esc(
+           countdown(q.seconds_left))}</strong>
+       </div>`
+    : `<div class="quota-head">
+         <span>Kontingent</span>
+         <strong>${q.used}/${q.limit}</strong>
+       </div>`;
+
+  // Der Regler: pro Account einstellbar, mit Empfehlung daneben.
+  const slider = `
+    <div class="quota-set">
+      <input type="range" data-quota="${account.id}"
+             min="${q.min}" max="${q.max}" step="5" value="${q.limit}">
+      <output>${q.limit}</output>
+    </div>`;
+
+  const offTarget = q.limit !== q.recommended;
+  const advice = `
+    <div class="quota-advice">
+      <span>${esc(q.advice)} Empfohlen: <strong>${q.recommended}</strong>${
+        q.total ? ` · bisher ${q.total} aufgenommen` : ""}</span>
+      ${offTarget
+        ? `<button class="btn btn-ghost btn-sm" data-quota-apply="${account.id}"
+             data-value="${q.recommended}">auf ${q.recommended} setzen</button>`
+        : ""}
+    </div>`;
 
   return `
-    <div class="quota">
-      <div class="quota-head">
-        <span>Kontingent</span>
-        <strong>${q.used}/${q.limit}</strong>
-      </div>
+    <div class="quota${q.blocked ? " quota--blocked" : ""}">
+      ${head}
       ${bar}
+      ${slider}
+      ${advice}
     </div>`;
 }
 
@@ -245,7 +262,38 @@ function fillAccountSelects() {
   renderOpAccounts();
 }
 
+async function saveQuota(accountId, limit) {
+  try {
+    await api(`/accounts/${accountId}/quota`, {
+      method: "PATCH",
+      body: { limit },
+    });
+    await loadAccounts();
+    loadStats();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// Waehrend des Ziehens nur die Zahl mitlaufen lassen, gespeichert wird
+// beim Loslassen - sonst ein Aufruf je Reglerschritt.
+$("#accountList").addEventListener("input", (e) => {
+  const slider = e.target.closest("[data-quota]");
+  if (slider) slider.nextElementSibling.textContent = slider.value;
+});
+
+$("#accountList").addEventListener("change", (e) => {
+  const slider = e.target.closest("[data-quota]");
+  if (slider) saveQuota(slider.dataset.quota, Number(slider.value));
+});
+
 $("#accountList").addEventListener("click", async (e) => {
+  const apply = e.target.closest("[data-quota-apply]");
+  if (apply) {
+    await saveQuota(apply.dataset.quotaApply, Number(apply.dataset.value));
+    return;
+  }
+
   const refresh = e.target.closest("[data-refresh]");
   const remove = e.target.closest("[data-remove]");
   const release = e.target.closest("[data-release]");
